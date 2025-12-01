@@ -17,6 +17,8 @@ Palm Recognition - 掌纹识别系统
 """
 
 import argparse
+from datetime import datetime
+from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
@@ -55,6 +57,8 @@ def parse_args():
                         help='特征维度')
     parser.add_argument('--margin', type=float, default=0.5,
                         help='对比损失的margin')
+    parser.add_argument('--batch_size', type=int, default=None,
+                        help='对比学习训练批次大小（默认读取配置或32）')
     
     # 评估参数
     parser.add_argument('--model', type=str, default='best_contrastive_model.pth',
@@ -117,6 +121,7 @@ def main():
             num_workers=args.num_workers,
             save_path='best_contrastive_model.pth',
             backbone=args.backbone,
+            batch_size=args.batch_size,
         )
         print(f"✓ 对比学习模型训练完成 - 最佳损失: {result['best_metric']:.4f}\n")
         
@@ -126,15 +131,25 @@ def main():
     
     if args.mode == 'evaluate' or args.mode == 'all':
         print("\n[3/3] 评估认证性能...")
+        # 日志
+        log_path = Path("logs") / f"evaluate_{datetime.now():%Y%m%d_%H%M%S}.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_f = open(log_path, "a", encoding="utf-8")
+
+        def log(msg: str):
+            print(msg)
+            log_f.write(msg + "\n")
+            log_f.flush()
         
         # 加载模型
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         checkpoint = None
         try:
             checkpoint = torch.load(args.model, map_location=device)
-            print(f"✓ 成功加载模型: {args.model}")
+            log(f"✓ 成功加载模型: {args.model}")
         except FileNotFoundError:
-            print(f"✗ 找不到模型文件: {args.model}")
+            log(f"✗ 找不到模型文件: {args.model}")
+            log_f.close()
             return
 
         # 兼容两种存储格式：纯 state_dict 或 新版字典
@@ -167,19 +182,21 @@ def main():
         
         results = []
         for threshold in thresholds:
-            result = evaluate_authentication(model, gallery_loader, query_loader, threshold=threshold)
+            result = evaluate_authentication(model, gallery_loader, query_loader, threshold=threshold, log_func=log)
             results.append((threshold, result))
         
         # 输出总结
-        print("\n" + "="*60)
-        print("评估结果总结:")
-        print("="*60)
-        print(f"{'阈值':<10} {'FAR (%)':<10} {'FRR (%)':<10} {'平均真实距离':<15} {'平均冒充距离':<15}")
-        print("-"*60)
+        log("\n" + "="*60)
+        log("评估结果总结:")
+        log("="*60)
+        log(f"{'阈值':<10} {'FAR (%)':<10} {'FRR (%)':<10} {'平均真实距离':<15} {'平均冒充距离':<15}")
+        log("-"*60)
         for threshold, result in results:
-            print(f"{threshold:<10.2f} {result['FAR']:<10.2f} {result['FRR']:<10.2f} "
-                  f"{result['genuine_mean']:<15.4f} {result['impostor_mean']:<15.4f}")
-        print("="*60)
+            log(f"{threshold:<10.2f} {result['FAR']:<10.2f} {result['FRR']:<10.2f} "
+                f"{result['genuine_mean']:<15.4f} {result['impostor_mean']:<15.4f}")
+        log("="*60)
+        log(f"日志已保存: {log_path}")
+        log_f.close()
     
     print("\n✓ 所有任务完成！")
 

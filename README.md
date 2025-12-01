@@ -59,10 +59,11 @@ PY
 ### 数据准备
 
 将数据集放在 `PalmBigDataBase/` 目录下，文件命名格式：
-- 右手：`P_F_{ID}_{序号}.bmp`（例如：`P_F_100_1.bmp`）
-- 左手：`P_S_{ID}_{序号}.bmp`（例如：`P_S_100_1.bmp`）
+- `P_F_{ID}_{序号}.bmp` / `P_S_{ID}_{序号}.bmp`，其中 F/S 仅表示光照方向。
 
-每个身份包含10张图像：前5张用于训练，后5张用于测试。
+划分规则：
+- 身份按 `ID` 聚合（忽略 F/S）。
+- 训练集使用 F 前 5 张，测试集使用 S 前 5 张。
 
 ## 💻 使用方法
 
@@ -82,8 +83,8 @@ python run.py --mode train_classifier --epochs 30 --lr 0.001 --cls_loss ce --bac
 
 #### 仅训练对比学习模型
 ```bash
-python run.py --mode train_contrastive --epochs 30 --margin 0.5 --feature_dim 128 --backbone mobileone
-# backbone 可选 inet/mobileone
+python run.py --mode train_contrastive --epochs 30 --margin 0.5 --feature_dim 128 --backbone mobileone --batch_size 32
+# backbone 可选 inet/mobileone；batch_size 可覆盖配置/默认值
 ```
 
 #### 仅评估模型

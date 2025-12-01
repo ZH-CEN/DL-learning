@@ -49,14 +49,12 @@ class PalmDataset(Dataset):
     @staticmethod
     def _get_identity(filename):
         """
-        从文件名提取身份ID
-        例：P_F_100_1.bmp → "F_100" (右手ID=100)
-            P_S_100_1.bmp → "S_100" (左手ID=100)
+        从文件名提取身份ID（忽略 F/S 光照标记，按 person_id 聚合）
+        例：P_F_100_1.bmp / P_S_100_1.bmp → "100"
         """
         parts = filename.split("_")
-        hand = parts[1]  # F 或 S
         person_id = parts[2]
-        return f"{hand}_{person_id}"
+        return person_id
 
     def __len__(self):
         return len(self.samples)
@@ -83,7 +81,7 @@ class PalmDataset(Dataset):
 class AuthDataset(Dataset):
     """
     认证数据集
-    每个身份取5张训练，5张测试，可选缓存。
+    按人聚合身份，F/S 仅用于划分：F 前5张作训练，S 前5张作测试，可选缓存。
     """
 
     def __init__(self, root, mode='train', transform=None, cache: bool = True):
@@ -100,22 +98,22 @@ class AuthDataset(Dataset):
         self.cache = cache
         self._cache_data = {}
 
-        # 按身份ID分组样本（区分左右手）
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
         for path in all_samples:
             pid = self._get_identity(path.name)
-            if pid not in id_groups:
-                id_groups[pid] = []
-            id_groups[pid].append(path)
+            hand = self._get_hand(path.name)
+            id_groups.setdefault(pid, {"F": [], "S": []})
+            id_groups[pid][hand].append(path)
 
-        # 每个ID取5张训练，5张测试
         self.samples = []
-        for pid, paths in id_groups.items():
+        for pid, hands in id_groups.items():
             if mode == 'train':
-                self.samples.extend(paths[:5])
-            else:  # test
-                self.samples.extend(paths[5:10])
+                # 使用 F 手（光照方向 F）前 5 张作为训练
+                self.samples.extend(hands["F"][:5])
+            else:
+                # 使用 S 手前 5 张作为测试
+                self.samples.extend(hands["S"][:5])
 
         self.samples = sorted(self.samples)
         ids = sorted({self._get_identity(p.name) for p in self.samples})
@@ -129,11 +127,15 @@ class AuthDataset(Dataset):
 
     @staticmethod
     def _get_identity(filename):
-        """从文件名提取身份ID"""
+        """从文件名提取身份ID（忽略 F/S 光照标记）"""
         parts = filename.split("_")
-        hand = parts[1]  # F 或 S
         person_id = parts[2]
-        return f"{hand}_{person_id}"
+        return person_id
+
+    @staticmethod
+    def _get_hand(filename):
+        parts = filename.split("_")
+        return parts[1]
 
     def __len__(self):
         return len(self.samples)
@@ -156,6 +158,7 @@ class ContrastivePairDataset(Dataset):
     """
     对比学习数据集
     返回样本对（正样本对/负样本对），可选缓存。
+    F/S 仅用于划分：F 手图片用于训练集，S 手用于测试集。
     """
 
     def __init__(self, root, mode='train', transform=None, cache: bool = True):
@@ -172,25 +175,22 @@ class ContrastivePairDataset(Dataset):
         self.cache = cache
         self._cache_data = {}
 
-        # 按身份ID分组样本（区分左右手）
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
         for path in all_samples:
             pid = self._get_identity(path.name)
-            if pid not in id_groups:
-                id_groups[pid] = []
-            id_groups[pid].append(path)
+            hand = self._get_hand(path.name)
+            id_groups.setdefault(pid, {"F": [], "S": []})
+            id_groups[pid][hand].append(path)
 
-        # 每个ID取5张训练，5张测试
         self.id_groups = {}
-        for pid, paths in id_groups.items():
+        for pid, hands in id_groups.items():
             if mode == 'train':
-                selected = paths[:5]
+                selected = hands["F"][:5]
             else:  # test
-                selected = paths[5:10]
+                selected = hands["S"][:5]
 
-            # 只保留有样本的身份
-            if len(selected) > 0:
+            if selected:
                 self.id_groups[pid] = selected
 
         self.ids = list(self.id_groups.keys())
@@ -204,11 +204,15 @@ class ContrastivePairDataset(Dataset):
 
     @staticmethod
     def _get_identity(filename):
-        """从文件名提取身份ID"""
+        """从文件名提取身份ID（忽略 F/S 光照标记）"""
         parts = filename.split("_")
-        hand = parts[1]  # F 或 S
         person_id = parts[2]
-        return f"{hand}_{person_id}"
+        return person_id
+
+    @staticmethod
+    def _get_hand(filename):
+        parts = filename.split("_")
+        return parts[1]
 
     def __len__(self):
         return len(self.ids) * 10  # 每个ID生成10对样本
@@ -222,7 +226,7 @@ class ContrastivePairDataset(Dataset):
     def __getitem__(self, index):
         # 50%正样本对，50%负样本对
         if index % 2 == 0:
-            # 正样本对（同一个人同一只手）
+            # 正样本对（同一个人）
             pid = self.ids[index // 10 % len(self.ids)]
             paths = self.id_groups[pid]
             if len(paths) >= 2:
@@ -231,7 +235,7 @@ class ContrastivePairDataset(Dataset):
                 path1 = path2 = paths[0]
             label = 1.0
         else:
-            # 负样本对（不同的人或不同的手）
+            # 负样本对（不同的人）
             idx1 = (index // 10) % len(self.ids)
             idx2 = (idx1 + 1 + random.randint(0, len(self.ids) - 2)) % len(self.ids)
 
@@ -256,6 +260,7 @@ class TripletDataset(Dataset):
     """
     三元组数据集
     返回 (anchor, positive, negative)，可选缓存。
+    F/S 仅用于划分：训练用 F，测试用 S。
     """
 
     def __init__(self, root, mode="train", transform=None, cache: bool = True):
@@ -270,11 +275,13 @@ class TripletDataset(Dataset):
         id_groups = {}
         for path in all_samples:
             pid = self._get_identity(path.name)
-            id_groups.setdefault(pid, []).append(path)
+            hand = self._get_hand(path.name)
+            id_groups.setdefault(pid, {"F": [], "S": []})
+            id_groups[pid][hand].append(path)
 
         self.id_groups = {}
-        for pid, paths in id_groups.items():
-            selected = paths[:5] if mode == "train" else paths[5:10]
+        for pid, hands in id_groups.items():
+            selected = hands["F"][:5] if mode == "train" else hands["S"][:5]
             if selected:
                 self.id_groups[pid] = selected
         self.ids = list(self.id_groups.keys())
@@ -289,9 +296,13 @@ class TripletDataset(Dataset):
     @staticmethod
     def _get_identity(filename):
         parts = filename.split("_")
-        hand = parts[1]
         person_id = parts[2]
-        return f"{hand}_{person_id}"
+        return person_id
+
+    @staticmethod
+    def _get_hand(filename):
+        parts = filename.split("_")
+        return parts[1]
 
     def __len__(self):
         return max(1, len(self.ids) * 10)

@@ -38,19 +38,20 @@ def extract_features(model, dataloader):
     return torch.cat(all_features, dim=0), torch.cat(all_labels, dim=0)
 
 
-def build_gallery(model, dataloader):
+def build_gallery(model, dataloader, log_func=print):
     """
     构建特征画廊（每个身份的平均特征）
     
     Args:
         model: 特征提取模型
         dataloader: 数据加载器
+        log_func: 日志函数
         
     Returns:
         gallery_features: 画廊特征 (num_identities, feature_dim)
         identity_ids: 身份ID列表
     """
-    print("构建特征画廊...")
+    log_func("构建特征画廊...")
     features, labels = extract_features(model, dataloader)
     
     # 对每个身份计算平均特征
@@ -67,7 +68,7 @@ def build_gallery(model, dataloader):
     return gallery_features, unique_labels.tolist()
 
 
-def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6):
+def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6, log_func=print):
     """
     评估认证模型的FAR和FRR
     
@@ -76,14 +77,15 @@ def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6):
         gallery_loader: 画廊数据加载器
         query_loader: 查询数据加载器
         threshold: 认证阈值
+        log_func: 日志函数
     """
     device = next(model.parameters()).device
     
     # 构建画廊
-    gallery_features, _ = build_gallery(model, gallery_loader)
+    gallery_features, _ = build_gallery(model, gallery_loader, log_func=log_func)
     gallery_features = gallery_features.to(device)
     
-    print(f"\n使用阈值 {threshold} 进行认证测试...")
+    log_func(f"\n使用阈值 {threshold} 进行认证测试...")
     
     genuine_scores = []  # 真实匹配的距离
     impostor_scores = []  # 冒充者的距离
@@ -109,13 +111,13 @@ def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6):
     FRR = (genuine_scores > threshold).float().mean().item() * 100  # 误拒率
     FAR = (impostor_scores < threshold).float().mean().item() * 100  # 误识率
     
-    print(f"\n认证性能评估:")
-    print(f"阈值: {threshold}")
-    print(f"FRR (误拒率): {FRR:.2f}%")
-    print(f"FAR (误识率): {FAR:.2f}%")
-    print(f"平均真实距离: {genuine_scores.mean():.4f}")
-    print(f"平均冒充距离: {impostor_scores.mean():.4f}")
-    print("="*60)
+    log_func(f"\n认证性能评估:")
+    log_func(f"阈值: {threshold}")
+    log_func(f"FRR (误拒率): {FRR:.2f}%")
+    log_func(f"FAR (误识率): {FAR:.2f}%")
+    log_func(f"平均真实距离: {genuine_scores.mean():.4f}")
+    log_func(f"平均冒充距离: {impostor_scores.mean():.4f}")
+    log_func("="*60)
     
     return {
         "FRR": FRR,

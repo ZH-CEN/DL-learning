@@ -3,6 +3,9 @@
 包含分类和度量学习的训练函数。
 """
 
+from datetime import datetime
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,6 +32,7 @@ def train_classifier(
     focal_gamma: float = 2.0,
     backbone: str = "inet",
     loss_config_dir: str = "config",
+    log_file: str | None = None,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = get_transform(cfg)
@@ -82,8 +86,17 @@ def train_classifier(
 
     best_acc = 0.0
 
-    print(f"开始训练分类模型 - {num_classes} 个类别")
-    print("=" * 60)
+    log_file = log_file or Path("logs") / f"train_classifier_{datetime.now():%Y%m%d_%H%M%S}.log"
+    Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+    log_f = open(log_file, "a", encoding="utf-8")
+
+    def log(msg: str):
+        print(msg)
+        log_f.write(msg + "\n")
+        log_f.flush()
+
+    log(f"开始训练分类模型 - {num_classes} 个类别")
+    log("=" * 60)
 
     for epoch in range(epochs):
         model.train()
@@ -117,7 +130,7 @@ def train_classifier(
                 correct += (predicted == labels).sum().item()
 
         acc = 100 * correct / total
-        print(f"Epoch {epoch+1}: Loss={avg_loss:.4f}, Val Acc={acc:.2f}%")
+        log(f"Epoch {epoch+1}: Loss={avg_loss:.4f}, Val Acc={acc:.2f}%")
 
         if acc > best_acc:
             best_acc = acc
@@ -131,10 +144,11 @@ def train_classifier(
                 },
                 save_path,
             )
-            print(f"✓ 保存最佳模型，准确率: {best_acc:.2f}% -> {save_path}")
+            log(f"✓ 保存最佳模型，准确率: {best_acc:.2f}% -> {save_path}")
 
-    print(f"\n训练完成！最佳准确率: {best_acc:.2f}%")
-    return {"best_metric": best_acc / 100, "best_path": save_path, "final_loss": avg_loss}
+    log(f"\n训练完成！最佳准确率: {best_acc:.2f}%")
+    log_f.close()
+    return {"best_metric": best_acc / 100, "best_path": save_path, "final_loss": avg_loss, "log_file": str(log_file)}
 
 
 def train_contrastive(
@@ -150,6 +164,8 @@ def train_contrastive(
     loss_type: str = "contrastive",
     loss_config_dir: str = "config",
     backbone: str = "inet",
+    batch_size: int | None = None,
+    log_file: str | None = None,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = get_transform(cfg)
@@ -177,7 +193,8 @@ def train_contrastive(
     if lr == default_lr:
         lr = loss_cfg.get("learning_rate", lr)
 
-    batch_size = loss_cfg.get("batch_size", default_batch_size)
+    if batch_size is None:
+        batch_size = loss_cfg.get("batch_size", default_batch_size)
     weight_decay = loss_cfg.get("weight_decay", default_weight_decay)
     lr_step_size = loss_cfg.get("lr_step_size", default_lr_step)
     lr_gamma = loss_cfg.get("lr_gamma", default_lr_gamma)
@@ -212,8 +229,20 @@ def train_contrastive(
     best_loss = float("inf")
     best_acc = 0.0
 
-    print(f"开始训练度量学习模型 - loss={loss_type}, margin={margin}, feature_dim={feature_dim}")
-    print("=" * 60)
+    log_file = log_file or Path("logs") / f"train_contrastive_{datetime.now():%Y%m%d_%H%M%S}.log"
+    Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+    log_f = open(log_file, "a", encoding="utf-8")
+
+    def log(msg: str):
+        print(msg)
+        log_f.write(msg + "\n")
+        log_f.flush()
+
+    log(
+        f"开始训练度量学习模型 - loss={loss_type}, margin={margin}, feature_dim={feature_dim}, "
+        f"batch_size={batch_size}, backbone={backbone}"
+    )
+    log("=" * 60)
 
     for epoch in range(epochs):
         model.train()
@@ -298,8 +327,8 @@ def train_contrastive(
         avg_pos_dist = sum(pos_distances) / len(pos_distances) if pos_distances else 0
         avg_neg_dist = sum(neg_distances) / len(neg_distances) if neg_distances else 0
 
-        print(f"Epoch {epoch+1}: Train Loss={avg_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.2f}%")
-        print(f"  正样本距离: {avg_pos_dist:.4f}, 负样本距离: {avg_neg_dist:.4f}")
+        log(f"Epoch {epoch+1}: Train Loss={avg_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.2f}%")
+        log(f"  正样本距离: {avg_pos_dist:.4f}, 负样本距离: {avg_neg_dist:.4f}")
 
         if val_loss < best_loss:
             best_loss = val_loss
@@ -314,7 +343,8 @@ def train_contrastive(
                 },
                 save_path,
             )
-            print(f"✓ 保存最佳模型，验证损失: {best_loss:.4f}, 准确率: {val_acc:.2f}% -> {save_path}")
+            log(f"✓ 保存最佳模型，验证损失: {best_loss:.4f}, 准确率: {val_acc:.2f}% -> {save_path}")
 
-    print(f"\n训练完成！最佳验证损失: {best_loss:.4f}, 准确率: {best_acc:.2f}%")
-    return {"best_metric": best_loss, "best_path": save_path, "best_acc": best_acc / 100}
+    log(f"\n训练完成！最佳验证损失: {best_loss:.4f}, 准确率: {best_acc:.2f}%")
+    log_f.close()
+    return {"best_metric": best_loss, "best_path": save_path, "best_acc": best_acc / 100, "log_file": str(log_file)}
