@@ -370,8 +370,32 @@ def train_contrastive(
         avg_pos_dist = sum(pos_distances) / len(pos_distances) if pos_distances else 0
         avg_neg_dist = sum(neg_distances) / len(neg_distances) if neg_distances else 0
 
+        # 基于验证集距离，给出当前阈值表现 & 推荐阈值（近似 EER）
+        pos_tensor = torch.tensor(pos_distances) if pos_distances else torch.tensor([])
+        neg_tensor = torch.tensor(neg_distances) if neg_distances else torch.tensor([])
+        def compute_far_frr(th: float):
+            far = (neg_tensor < th).float().mean().item() * 100 if neg_tensor.numel() else 0.0
+            frr = (pos_tensor > th).float().mean().item() * 100 if pos_tensor.numel() else 0.0
+            return far, frr
+        th_val = margin / 2 if margin is not None else 0.5
+        far_val, frr_val = compute_far_frr(th_val)
+        # 粗扫 200 个阈值，找 FAR≈FRR 点
+        best_th, best_gap = th_val, float("inf")
+        if pos_tensor.numel() and neg_tensor.numel():
+            all_scores = torch.cat([pos_tensor, neg_tensor])
+            scan_th = torch.linspace(all_scores.min(), all_scores.max(), steps=200)
+            for th in scan_th:
+                far_tmp, frr_tmp = compute_far_frr(th.item())
+                gap = abs(far_tmp - frr_tmp)
+                if gap < best_gap:
+                    best_gap = gap
+                    best_th = th.item()
+        far_best, frr_best = compute_far_frr(best_th)
+
         log(f"Epoch {epoch+1}: Train Loss={avg_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.2f}%")
         log(f"  正样本距离: {avg_pos_dist:.4f}, 负样本距离: {avg_neg_dist:.4f}")
+        log(f"  阈值=margin/2={th_val:.4f} -> FAR={far_val:.2f}%, FRR={frr_val:.2f}%")
+        log(f"  推荐阈值≈EER: {best_th:.4f} -> FAR={far_best:.2f}%, FRR={frr_best:.2f}% (gap={best_gap:.2f})")
 
         if val_loss < best_loss:
             best_loss = val_loss

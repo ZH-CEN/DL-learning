@@ -67,8 +67,8 @@ def parse_args():
                         help='混合训练时对比损失的权重系数')
     
     # 评估参数
-    parser.add_argument('--model', type=str, default='best_contrastive_model.pth',
-                        help='模型权重文件')
+    parser.add_argument('--model', type=str, default=None,
+                        help='模型权重文件（不填则按 backbone 使用 best_contrastive_<backbone>.pth）')
     parser.add_argument('--threshold', type=float, nargs='+', default=[0.3, 0.4, 0.5, 0.6, 0.7],
                         help='认证阈值（可以指定多个）')
     
@@ -102,6 +102,7 @@ def main():
     # 根据模式执行不同操作
     if args.mode == 'train_classifier' or args.mode == 'all':
         print("\n[1/3] 训练分类模型...")
+        cls_path = f"best_classifier_{args.backbone}.pth"
         result = train_classifier(
             cfg=cfg,
             data_root=args.data_root,
@@ -109,7 +110,7 @@ def main():
             lr=args.lr,
             cache=args.cache,
             num_workers=args.num_workers,
-            save_path='best_classifier.pth',
+            save_path=cls_path,
             loss_type=args.cls_loss,
             backbone=args.backbone,
         )
@@ -117,6 +118,7 @@ def main():
     
     if args.mode == 'train_contrastive' or args.mode == 'all':
         print("\n[2/3] 训练对比学习模型...")
+        ct_path = f"best_contrastive_{args.backbone}.pth"
         result = train_contrastive(
             cfg=cfg,
             data_root=args.data_root,
@@ -125,7 +127,7 @@ def main():
             margin=args.margin,
             feature_dim=args.feature_dim,
             num_workers=args.num_workers,
-            save_path='best_contrastive_model.pth',
+            save_path=ct_path,
             backbone=args.backbone,
             batch_size=args.batch_size,
         )
@@ -137,6 +139,7 @@ def main():
 
     if args.mode == 'train_arcface_contrastive':
         print("\n[2/3] ArcFace+对比混合训练...")
+        mix_path = f"best_arcface_contrastive_{args.backbone}.pth"
         result = train_arcface_contrastive(
             cfg=cfg,
             data_root=args.data_root,
@@ -145,7 +148,7 @@ def main():
             margin=args.margin,
             feature_dim=args.feature_dim,
             num_workers=args.num_workers,
-            save_path='best_arcface_contrastive.pth',
+            save_path=mix_path,
             backbone=args.backbone,
             batch_size=args.batch_size,
             arcface_margin=args.arcface_margin,
@@ -170,11 +173,12 @@ def main():
         # 加载模型
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         checkpoint = None
+        model_path = args.model or f"best_contrastive_{args.backbone}.pth"
         try:
-            checkpoint = torch.load(args.model, map_location=device)
-            log(f"✓ 成功加载模型: {args.model}")
+            checkpoint = torch.load(model_path, map_location=device)
+            log(f"✓ 成功加载模型: {model_path}")
         except FileNotFoundError:
-            log(f"✗ 找不到模型文件: {args.model}")
+            log(f"✗ 找不到模型文件: {model_path}")
             log_f.close()
             return
 
