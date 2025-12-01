@@ -49,6 +49,8 @@ def parse_args():
                         help='学习率')
     parser.add_argument('--cls_loss', type=str, default='ce', choices=['ce', 'focal', 'mse'],
                         help='分类损失类型')
+    parser.add_argument('--backbone', type=str, default='inet', choices=['inet', 'mobileone'],
+                        help='特征提取骨干')
     parser.add_argument('--feature_dim', type=int, default=128,
                         help='特征维度')
     parser.add_argument('--margin', type=float, default=0.5,
@@ -97,6 +99,7 @@ def main():
             num_workers=args.num_workers,
             save_path='best_classifier.pth',
             loss_type=args.cls_loss,
+            backbone=args.backbone,
         )
         print(f"✓ 分类模型训练完成 - 最佳准确率: {result['best_metric']*100:.2f}%\n")
     
@@ -110,7 +113,8 @@ def main():
             margin=args.margin,
             feature_dim=args.feature_dim,
             num_workers=args.num_workers,
-            save_path='best_contrastive_model.pth'
+            save_path='best_contrastive_model.pth',
+            backbone=args.backbone,
         )
         print(f"✓ 对比学习模型训练完成 - 最佳损失: {result['best_metric']:.4f}\n")
         
@@ -123,15 +127,28 @@ def main():
         
         # 加载模型
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = INet(feature_dim=args.feature_dim).to(device)
-        
+        checkpoint = None
         try:
-            state_dict = torch.load(args.model, map_location=device)
-            model.load_state_dict(state_dict)
+            checkpoint = torch.load(args.model, map_location=device)
             print(f"✓ 成功加载模型: {args.model}")
         except FileNotFoundError:
             print(f"✗ 找不到模型文件: {args.model}")
             return
+
+        # 兼容两种存储格式：纯 state_dict 或 新版字典
+        if isinstance(checkpoint, dict) and "model" in checkpoint:
+            saved_backbone = checkpoint.get("backbone", "inet")
+            saved_feature_dim = checkpoint.get("feature_dim", args.feature_dim)
+            if saved_backbone == "mobileone":
+                from palm.mobileone import MobileOne
+
+                model = MobileOne(feature_dim=saved_feature_dim, normalize=False).to(device)
+            else:
+                model = INet(feature_dim=saved_feature_dim).to(device)
+            model.load_state_dict(checkpoint["model"])
+        else:
+            model = INet(feature_dim=args.feature_dim).to(device)
+            model.load_state_dict(checkpoint)
         
         # 准备数据
         transform = get_transform(cfg)

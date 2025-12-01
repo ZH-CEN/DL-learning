@@ -11,6 +11,7 @@ DL-learning/
 │   ├── config.py                 # 配置管理
 │   ├── datasets.py               # 数据集定义
 │   ├── models.py                 # 模型定义
+│   ├── mobileone.py              # MobileOne/Siamese 模型实现（对比实验）
 │   ├── losses.py                 # 损失函数
 │   ├── trainer.py                # 训练函数
 │   └── evaluate.py               # 评估函数
@@ -36,6 +37,25 @@ DL-learning/
 pip install torch torchvision pillow pyyaml tqdm
 ```
 
+### 使用 Conda 创建环境（推荐）
+
+```bash
+# 1) 创建并激活环境
+conda create -n palm python=3.11 -y
+conda activate palm
+
+# 2) 安装依赖
+pip install -r requirements.txt
+
+# 3) 验证
+python - <<'PY'
+import torch
+import torchvision
+print("torch:", torch.__version__, "| cuda:", torch.cuda.is_available())
+print("torchvision:", torchvision.__version__)
+PY
+```
+
 ### 数据准备
 
 将数据集放在 `PalmBigDataBase/` 目录下，文件命名格式：
@@ -55,12 +75,15 @@ python run.py --mode all --epochs 30
 
 #### 仅训练分类模型
 ```bash
-python run.py --mode train_classifier --epochs 30 --lr 0.001 --cls_loss ce  # 可选 ce/focal/mse
+python run.py --mode train_classifier --epochs 30 --lr 0.001 --cls_loss ce --backbone inet
+# backbone 可选 inet/mobileone，用来对比 FeatureNet 与 MobileOne
+# 分类损失可选 ce/focal/mse
 ```
 
 #### 仅训练对比学习模型
 ```bash
-python run.py --mode train_contrastive --epochs 30 --margin 0.5 --feature_dim 128
+python run.py --mode train_contrastive --epochs 30 --margin 0.5 --feature_dim 128 --backbone mobileone
+# backbone 可选 inet/mobileone
 ```
 
 #### 仅评估模型

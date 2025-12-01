@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
 from .models import INet, PalmClassifier
+from .mobileone import MobileOne, MobileOneClassifier
 from .datasets import PalmDataset, AuthDataset, ContrastivePairDataset, TripletDataset
 from .losses import ContrastiveLoss, TripletLoss, MarginLoss, FocalLoss, MSELoss
 from .config import get_transform, load_loss_config
@@ -26,6 +27,7 @@ def train_classifier(
     loss_type: str = "ce",
     focal_alpha: float = 0.25,
     focal_gamma: float = 2.0,
+    backbone: str = "inet",
     loss_config_dir: str = "config",
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,7 +43,14 @@ def train_classifier(
     val_loader = DataLoader(val_set, batch_size, shuffle=False, num_workers=num_workers)
 
     num_classes = len(dataset.id2idx)
-    model = PalmClassifier(num_classes=num_classes, feature_dim=128, normalize_features=True).to(device)
+    feature_dim = 128
+
+    # 选择分类模型
+    backbone = backbone.lower()
+    if backbone == "mobileone":
+        model = MobileOneClassifier(num_classes=num_classes, feature_dim=feature_dim, normalize_features=True).to(device)
+    else:
+        model = PalmClassifier(num_classes=num_classes, feature_dim=feature_dim, normalize_features=True).to(device)
 
     # 加载损失相关配置（config/<loss_type>.yml）
     loss_type = loss_type.lower()
@@ -109,7 +118,8 @@ def train_classifier(
                     "backbone": model.backbone.state_dict(),
                     "classifier": model.classifier.state_dict(),
                     "num_classes": num_classes,
-                    "feature_dim": 128,
+                    "feature_dim": feature_dim,
+                    "backbone_type": backbone,
                 },
                 save_path,
             )
@@ -130,6 +140,7 @@ def train_contrastive(
     save_path="best_contrastive_model.pth",
     loss_type: str = "contrastive",
     loss_config_dir: str = "config",
+    backbone: str = "inet",
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = get_transform(cfg)
@@ -158,7 +169,11 @@ def train_contrastive(
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-    model = INet(feature_dim=feature_dim).to(device)
+    backbone = backbone.lower()
+    if backbone == "mobileone":
+        model = MobileOne(feature_dim=feature_dim, normalize=False).to(device)
+    else:
+        model = INet(feature_dim=feature_dim).to(device)
     if loss_type == "contrastive":
         criterion = ContrastiveLoss(margin=margin)
     elif loss_type == "triplet":
@@ -266,8 +281,17 @@ def train_contrastive(
         if val_loss < best_loss:
             best_loss = val_loss
             best_acc = val_acc
-            torch.save(model.state_dict(), save_path)
-            print(f"✓ 保存最佳模型，验证损失: {best_loss:.4f}, 准确率: {val_acc:.2f}%")
+            torch.save(
+                {
+                    "model": model.state_dict(),
+                    "feature_dim": feature_dim,
+                    "margin": margin,
+                    "loss_type": loss_type,
+                    "backbone": backbone,
+                },
+                save_path,
+            )
+            print(f"✓ 保存最佳模型，验证损失: {best_loss:.4f}, 准确率: {val_acc:.2f}% -> {save_path}")
 
     print(f"\n训练完成！最佳验证损失: {best_loss:.4f}, 准确率: {best_acc:.2f}%")
     return {"best_metric": best_loss, "best_path": save_path, "best_acc": best_acc / 100}
