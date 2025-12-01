@@ -4,3 +4,4 @@ numpy
 Pillow
 PyYAML
 tqdm
+optuna

@@ -96,6 +96,13 @@ def train_classifier(
         log_f.flush()
 
     log(f"开始训练分类模型 - {num_classes} 个类别")
+    log(
+        f"超参: epochs={epochs}, lr={lr}, batch_size={batch_size}, loss={loss_type}, "
+        f"backbone={backbone}, num_workers={num_workers}, cache={cache}"
+    )
+    log("模型结构:")
+    for line in repr(model).splitlines():
+        log(f"  {line}")
     log("=" * 60)
 
     for epoch in range(epochs):
@@ -242,6 +249,13 @@ def train_contrastive(
         f"开始训练度量学习模型 - loss={loss_type}, margin={margin}, feature_dim={feature_dim}, "
         f"batch_size={batch_size}, backbone={backbone}"
     )
+    log(
+        f"超参: epochs={epochs}, lr={lr}, weight_decay={weight_decay}, "
+        f"lr_step={lr_step_size}, lr_gamma={lr_gamma}, num_workers={num_workers}, cache={cache}"
+    )
+    log("模型结构:")
+    for line in repr(model).splitlines():
+        log(f"  {line}")
     log("=" * 60)
 
     for epoch in range(epochs):

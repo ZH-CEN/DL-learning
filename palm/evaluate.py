@@ -62,9 +62,11 @@ def build_gallery(model, dataloader, log_func=print):
         mask = labels == label
         avg_feat = features[mask].mean(dim=0, keepdim=True)
         avg_features.append(avg_feat)
-    
+
     gallery_features = torch.cat(avg_features, dim=0)
-    
+    # 均值后再归一化，避免模长缩小导致距离被低估
+    gallery_features = F.normalize(gallery_features, p=2, dim=1)
+
     return gallery_features, unique_labels.tolist()
 
 
@@ -95,8 +97,9 @@ def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6, 
     query_features = query_features.to(device)
     
     for feat, label in tqdm(zip(query_features, query_labels), total=len(query_labels), desc="认证测试"):
-        # 计算与所有画廊特征的距离
-        distances = torch.cdist(feat.unsqueeze(0), gallery_features).squeeze(0)
+        # 计算余弦距离（与训练时一致）
+        cosine_sim = F.cosine_similarity(feat.unsqueeze(0), gallery_features, dim=1)
+        distances = 1 - cosine_sim  # 距离越小越相似
         min_dist, matched_idx = torch.min(distances, dim=0)
         
         if matched_idx.item() == label.item():
@@ -107,23 +110,42 @@ def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6, 
     # 计算FAR和FRR
     genuine_scores = torch.tensor(genuine_scores)
     impostor_scores = torch.tensor(impostor_scores)
-    
-    FRR = (genuine_scores > threshold).float().mean().item() * 100  # 误拒率
-    FAR = (impostor_scores < threshold).float().mean().item() * 100  # 误识率
+
+    def compute_metrics(th):
+        frr = (genuine_scores > th).float().mean().item() * 100  # 误拒率
+        far = (impostor_scores < th).float().mean().item() * 100  # 误识率
+        return far, frr
+
+    # 自动寻找 FAR≈FRR 的阈值，便于参考
+    best_th = threshold
+    best_gap = float("inf")
+    if len(genuine_scores) > 0 and len(impostor_scores) > 0:
+        all_scores = torch.cat([genuine_scores, impostor_scores])
+        scan_thresholds = torch.linspace(all_scores.min(), all_scores.max(), steps=200)
+        for th in scan_thresholds:
+            far_tmp, frr_tmp = compute_metrics(th)
+            gap = abs(far_tmp - frr_tmp)
+            if gap < best_gap:
+                best_gap = gap
+                best_th = th.item()
+    far, frr = compute_metrics(threshold)
     
     log_func(f"\n认证性能评估:")
     log_func(f"阈值: {threshold}")
-    log_func(f"FRR (误拒率): {FRR:.2f}%")
-    log_func(f"FAR (误识率): {FAR:.2f}%")
+    log_func(f"FRR (误拒率): {frr:.2f}%")
+    log_func(f"FAR (误识率): {far:.2f}%")
     log_func(f"平均真实距离: {genuine_scores.mean():.4f}")
     log_func(f"平均冒充距离: {impostor_scores.mean():.4f}")
+    log_func(f"推荐阈值(近似EER): {best_th:.4f} (gap={best_gap:.4f})")
     log_func("="*60)
     
     return {
-        "FRR": FRR,
-        "FAR": FAR,
+        "FRR": frr,
+        "FAR": far,
         "genuine_mean": genuine_scores.mean().item(),
-        "impostor_mean": impostor_scores.mean().item()
+        "impostor_mean": impostor_scores.mean().item(),
+        "best_threshold": best_th,
+        "best_gap": best_gap,
     }
 
 
