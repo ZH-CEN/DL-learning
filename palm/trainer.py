@@ -506,11 +506,21 @@ def train_arcface_contrastive(
         f"contrastive_margin={margin}, lambda={contrastive_weight}, feature_dim={feature_dim}, "
         f"batch_size={batch_size}, backbone={backbone}"
     )
+    log(
+        f"超参: epochs={epochs}, lr={lr}, weight_decay={weight_decay}, "
+        f"lr_step={lr_step_size}, lr_gamma={lr_gamma}, num_workers={num_workers}, cache={cache}"
+    )
+    log("模型结构:")
+    for line in repr(model).splitlines():
+        log(f"  {line}")
+    log("=" * 60)
 
     for epoch in range(epochs):
         model.train()
         arcface_loss.train()
         running_loss = 0.0
+        running_cls_loss = 0.0
+        running_metric_loss = 0.0
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}"):
             img1, img2, pair_labels, cls1, cls2 = batch
@@ -534,16 +544,25 @@ def train_arcface_contrastive(
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+            running_cls_loss += loss_cls.item()
+            running_metric_loss += loss_metric.item()
 
         avg_loss = running_loss / len(train_loader)
+        avg_cls_loss = running_cls_loss / len(train_loader)
+        avg_metric_loss = running_metric_loss / len(train_loader)
         scheduler.step()
 
         # 验证：用同一批数据评估度量准确率
         model.eval()
         arcface_loss.eval()
         val_loss = 0.0
+        val_cls_loss = 0.0
+        val_metric_loss = 0.0
         correct = 0
         total = 0
+        pos_distances = []
+        neg_distances = []
+        
         with torch.no_grad():
             for batch in test_loader:
                 img1, img2, pair_labels, cls1, cls2 = batch
@@ -559,20 +578,65 @@ def train_arcface_contrastive(
                 loss_metric = contrastive_loss(feat1, feat2, pair_labels)
                 loss = loss_cls + contrastive_weight * loss_metric
                 val_loss += loss.item()
+                val_cls_loss += loss_cls.item()
+                val_metric_loss += loss_metric.item()
 
                 # 二分类精度（对比分支）
                 feat1_norm = F.normalize(feat1, p=2, dim=1)
                 feat2_norm = F.normalize(feat2, p=2, dim=1)
                 cosine_similarity = F.cosine_similarity(feat1_norm, feat2_norm)
                 cosine_distance = 1 - cosine_similarity
+                
+                # 收集正负样本距离
+                for dist, label in zip(cosine_distance, pair_labels):
+                    if label == 1.0:
+                        pos_distances.append(dist.item())
+                    else:
+                        neg_distances.append(dist.item())
+                
                 threshold = margin / 2
                 predictions = (cosine_distance < threshold).float()
                 correct += (predictions == pair_labels).sum().item()
                 total += pair_labels.size(0)
 
         val_loss /= len(test_loader)
+        val_cls_loss /= len(test_loader)
+        val_metric_loss /= len(test_loader)
         val_acc = 100 * correct / total if total > 0 else 0
-        log(f"Epoch {epoch+1}: Train Loss={avg_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.2f}%")
+        
+        avg_pos_dist = sum(pos_distances) / len(pos_distances) if pos_distances else 0
+        avg_neg_dist = sum(neg_distances) / len(neg_distances) if neg_distances else 0
+
+        # 基于验证集距离，给出当前阈值表现 & 推荐阈值（近似 EER）
+        pos_tensor = torch.tensor(pos_distances) if pos_distances else torch.tensor([])
+        neg_tensor = torch.tensor(neg_distances) if neg_distances else torch.tensor([])
+        
+        def compute_far_frr(th: float):
+            far = (neg_tensor < th).float().mean().item() * 100 if neg_tensor.numel() else 0.0
+            frr = (pos_tensor > th).float().mean().item() * 100 if pos_tensor.numel() else 0.0
+            return far, frr
+        
+        th_val = margin / 2 if margin is not None else 0.5
+        far_val, frr_val = compute_far_frr(th_val)
+        
+        # 粗扫 200 个阈值，找 FAR≈FRR 点
+        best_th, best_gap = th_val, float("inf")
+        if pos_tensor.numel() and neg_tensor.numel():
+            all_scores = torch.cat([pos_tensor, neg_tensor])
+            scan_th = torch.linspace(all_scores.min(), all_scores.max(), steps=200)
+            for th in scan_th:
+                far_tmp, frr_tmp = compute_far_frr(th.item())
+                gap = abs(far_tmp - frr_tmp)
+                if gap < best_gap:
+                    best_gap = gap
+                    best_th = th.item()
+        far_best, frr_best = compute_far_frr(best_th)
+
+        log(f"Epoch {epoch+1}: Train Loss={avg_loss:.4f} (cls={avg_cls_loss:.4f}, metric={avg_metric_loss:.4f})")
+        log(f"  Val Loss={val_loss:.4f} (cls={val_cls_loss:.4f}, metric={val_metric_loss:.4f}), Val Acc={val_acc:.2f}%")
+        log(f"  正样本距离: {avg_pos_dist:.4f}, 负样本距离: {avg_neg_dist:.4f}")
+        log(f"  阈值=margin/2={th_val:.4f} -> FAR={far_val:.2f}%, FRR={frr_val:.2f}%")
+        log(f"  推荐阈值≈EER: {best_th:.4f} -> FAR={far_best:.2f}%, FRR={frr_best:.2f}% (gap={best_gap:.2f})")
 
         if val_loss < best_loss:
             best_loss = val_loss
