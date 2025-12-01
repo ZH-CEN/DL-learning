@@ -192,7 +192,7 @@ class ContrastivePairDataset(Dataset):
     """
     对比学习数据集
     返回样本对（正样本对/负样本对），可选缓存。
-    F/S 混合后按比例切分 train/test，默认 8:2。
+    Notebook 同款切分：每个“手型+身份”前5张做训练，后5张做测试（不足时按前半/后半）。
     """
 
     def __init__(self, root, mode='train', transform=None, cache: bool = True, split_ratio: float = 0.8, return_ids: bool = False):
@@ -224,9 +224,10 @@ class ContrastivePairDataset(Dataset):
             paths = sorted(paths)
             if not paths:
                 return [], []
+            # Notebook 逻辑：固定前5张 train，后5张 test；不足10张则前半/后半
             if len(paths) >= 10:
                 return paths[:5], paths[5:10]
-            cutoff = max(1, int(len(paths) * split_ratio))
+            cutoff = max(1, len(paths) // 2)
             if cutoff >= len(paths) and len(paths) > 1:
                 cutoff = len(paths) - 1
             return paths[:cutoff], paths[cutoff:]
