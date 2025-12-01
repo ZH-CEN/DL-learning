@@ -37,28 +37,30 @@ def train_classifier(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = get_transform(cfg)
 
-    # 按身份划分：每个ID的图片排序后 50/50 折半，避免同一ID跨 train/val 重叠
+    # 按身份+手型划分：训练仅用 F 手，验证用 S 手，避免光照/手型泄漏
     all_samples = sorted(Path(data_root).glob("*.bmp"))
-    id_groups: dict[str, list[Path]] = {}
+    id_groups: dict[str, dict[str, list[Path]]] = {}
     for path in all_samples:
         pid = PalmDataset._get_identity(path.name)
-        id_groups.setdefault(pid, []).append(path)
+        hand = path.name.split("_")[1]
+        id_groups.setdefault(pid, {"F": [], "S": []})
+        id_groups[pid][hand].append(path)
 
-    def split_half(paths: list[Path]):
-        paths = sorted(paths)
-        if not paths:
-            return [], []
-        mid = max(1, len(paths) // 2)
-        if mid == len(paths) and len(paths) > 1:
-            mid = len(paths) - 1
-        return paths[:mid], paths[mid:]
+    train_paths: list[Path] = []  # F
+    val_paths: list[Path] = []  # S
+    for hands in id_groups.values():
+        f_paths = sorted(hands.get("F", []))
+        s_paths = sorted(hands.get("S", []))
+        if f_paths:
+            train_paths.extend(f_paths)
+        if s_paths:
+            val_paths.extend(s_paths)
 
-    train_paths: list[Path] = []
-    val_paths: list[Path] = []
-    for paths in id_groups.values():
-        left, right = split_half(paths)
-        train_paths.extend(left)
-        val_paths.extend(right)
+    # 若没有 S 图可作验证，退化为按 80/20 切分 F
+    if not val_paths and train_paths:
+        cutoff = max(1, int(len(train_paths) * 0.8))
+        val_paths = train_paths[cutoff:]
+        train_paths = train_paths[:cutoff]
 
     train_set = PalmDataset(data_root, transform=transform, cache=cache, samples=train_paths)
     val_set = PalmDataset(data_root, transform=transform, cache=cache, samples=val_paths)
@@ -67,7 +69,7 @@ def train_classifier(
     train_loader = DataLoader(train_set, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     val_loader = DataLoader(val_set, batch_size, shuffle=False, num_workers=num_workers)
 
-    num_classes = len(dataset.id2idx)
+    num_classes = len(train_set.id2idx)
     feature_dim = 128
 
     # 选择分类模型

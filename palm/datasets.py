@@ -85,7 +85,7 @@ class PalmDataset(Dataset):
 class AuthDataset(Dataset):
     """
     认证数据集
-    按人聚合身份，F/S 均折半：各取前半作训练，后半作测试，可选缓存。
+    按人聚合身份，训练用 F 手，测试用 S 手，可选缓存。
     """
 
     def __init__(self, root, mode='train', transform=None, cache: bool = True):
@@ -110,25 +110,13 @@ class AuthDataset(Dataset):
             id_groups.setdefault(pid, {"F": [], "S": []})
             id_groups[pid][hand].append(path)
 
-        def split_half(paths):
-            paths = sorted(paths)
-            if not paths:
-                return [], []
-            mid = max(1, len(paths) // 2)
-            if mid == len(paths) and len(paths) > 1:
-                mid = len(paths) - 1
-            return paths[:mid], paths[mid:]
-
+        # 训练仅用 F，测试仅用 S，避免光照泄漏
         self.samples = []
-        for pid, hands in id_groups.items():
-            f_train, f_test = split_half(hands["F"])
-            s_train, s_test = split_half(hands["S"])
-
+        for _, hands in id_groups.items():
             if mode == 'train':
-                selected = f_train + s_train
+                selected = sorted(hands["F"])
             else:
-                selected = f_test + s_test
-
+                selected = sorted(hands["S"])
             self.samples.extend(selected)
 
         self.samples = sorted(self.samples)
@@ -174,7 +162,7 @@ class ContrastivePairDataset(Dataset):
     """
     对比学习数据集
     返回样本对（正样本对/负样本对），可选缓存。
-    F/S 均折半：各取前半作训练，后半作测试。
+    训练用 F 手，测试用 S 手。
     """
 
     def __init__(self, root, mode='train', transform=None, cache: bool = True):
@@ -199,24 +187,10 @@ class ContrastivePairDataset(Dataset):
             id_groups.setdefault(pid, {"F": [], "S": []})
             id_groups[pid][hand].append(path)
 
-        def split_half(paths):
-            paths = sorted(paths)
-            if not paths:
-                return [], []
-            mid = max(1, len(paths) // 2)
-            if mid == len(paths) and len(paths) > 1:
-                mid = len(paths) - 1
-            return paths[:mid], paths[mid:]
-
+        # 训练仅用 F，测试仅用 S
         self.id_groups = {}
         for pid, hands in id_groups.items():
-            f_train, f_test = split_half(hands["F"])
-            s_train, s_test = split_half(hands["S"])
-            if mode == 'train':
-                selected = f_train + s_train
-            else:  # test
-                selected = f_test + s_test
-
+            selected = sorted(hands["F"]) if mode == 'train' else sorted(hands["S"])
             if selected:
                 self.id_groups[pid] = selected
 
@@ -287,7 +261,7 @@ class TripletDataset(Dataset):
     """
     三元组数据集
     返回 (anchor, positive, negative)，可选缓存。
-    F/S 均折半：各取前半作训练，后半作测试。
+    训练用 F 手，测试用 S 手。
     """
 
     def __init__(self, root, mode="train", transform=None, cache: bool = True):
@@ -306,20 +280,10 @@ class TripletDataset(Dataset):
             id_groups.setdefault(pid, {"F": [], "S": []})
             id_groups[pid][hand].append(path)
 
-        def split_half(paths):
-            paths = sorted(paths)
-            if not paths:
-                return [], []
-            mid = max(1, len(paths) // 2)
-            if mid == len(paths) and len(paths) > 1:
-                mid = len(paths) - 1
-            return paths[:mid], paths[mid:]
-
+        # 训练仅用 F，测试仅用 S
         self.id_groups = {}
         for pid, hands in id_groups.items():
-            f_train, f_test = split_half(hands["F"])
-            s_train, s_test = split_half(hands["S"])
-            selected = (f_train + s_train) if mode == "train" else (f_test + s_test)
+            selected = sorted(hands["F"]) if mode == "train" else sorted(hands["S"])
             if selected:
                 self.id_groups[pid] = selected
         self.ids = list(self.id_groups.keys())
