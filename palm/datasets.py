@@ -93,10 +93,10 @@ class AuthDataset(Dataset):
     """
     认证数据集
     按人聚合身份，F/S 混合后按比例切分 train/test，可选缓存。
-    支持传入固定 id2idx，保证 train/test 标签一致。
+    支持传入固定 id2idx，保证 train/test 标签一致。默认 8:2 划分。
     """
 
-    def __init__(self, root, mode='train', transform=None, cache: bool = True, id2idx: dict | None = None, split_ratio: float = 0.5):
+    def __init__(self, root, mode='train', transform=None, cache: bool = True, id2idx: dict | None = None, split_ratio: float = 0.8):
         """
         Args:
             root: 数据集根目录
@@ -186,10 +186,10 @@ class ContrastivePairDataset(Dataset):
     """
     对比学习数据集
     返回样本对（正样本对/负样本对），可选缓存。
-    F/S 混合后按比例切分 train/test。
+    F/S 混合后按比例切分 train/test，默认 8:2。
     """
 
-    def __init__(self, root, mode='train', transform=None, cache: bool = True, split_ratio: float = 0.5):
+    def __init__(self, root, mode='train', transform=None, cache: bool = True, split_ratio: float = 0.8):
         """
         Args:
             root: 数据集根目录
@@ -296,10 +296,10 @@ class TripletDataset(Dataset):
     """
     三元组数据集
     返回 (anchor, positive, negative)，可选缓存。
-    F/S 混合后按比例切分 train/test。
+    F/S 混合后按比例切分 train/test，默认 8:2。
     """
 
-    def __init__(self, root, mode="train", transform=None, cache: bool = True, split_ratio: float = 0.5):
+    def __init__(self, root, mode="train", transform=None, cache: bool = True, split_ratio: float = 0.8):
         assert mode in {"train", "test"}
         self.root = Path(root)
         self.mode = mode
