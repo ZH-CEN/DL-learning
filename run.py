@@ -234,26 +234,61 @@ def main():
         pos = np.array(pos_distances)
         neg = np.array(neg_distances)
 
-        def compute_far_frr(th):
-            far = float((neg < th).mean() * 100) if neg.size else 0.0
-            frr = float((pos > th).mean() * 100) if pos.size else 0.0
-            return far, frr
+        def compute_metrics(th: float):
+            """给定阈值，计算 FAR / FRR / ACC（百分比形式）"""
+            if not (pos.size and neg.size):
+                return 0.0, 0.0, 0.0
+            far = float((neg < th).mean() * 100)
+            frr = float((pos > th).mean() * 100)
 
-        # 扫描推荐阈值
+            tp = float((pos < th).sum())
+            fn = float((pos >= th).sum())
+            fp = float((neg < th).sum())
+            tn = float((neg >= th).sum())
+            total = tp + fn + fp + tn
+            acc = float((tp + tn) / total * 100) if total > 0 else 0.0
+            return far, frr, acc
+
+        # 使用二分搜索在距离范围内寻找 FAR≈FRR 的推荐阈值
         best_th, best_gap = None, float("inf")
         if pos.size and neg.size:
             all_scores = np.concatenate([pos, neg])
-            scan = np.linspace(all_scores.min(), all_scores.max(), num=200)
-            for th in scan:
-                far_tmp, frr_tmp = compute_far_frr(th)
-                gap = abs(far_tmp - frr_tmp)
-                if gap < best_gap:
-                    best_gap = gap
-                    best_th = th
+            low = float(all_scores.min()) - 1e-6
+            high = float(all_scores.max()) + 1e-6
+
+            def gap(th: float) -> float:
+                far_tmp, frr_tmp, _ = compute_metrics(th)
+                return far_tmp - frr_tmp
+
+            g_low = gap(low)
+            g_high = gap(high)
+            if g_low > 0 or g_high < 0:
+                # 极端情况下退化为线性扫描
+                scan = np.linspace(all_scores.min(), all_scores.max(), num=200)
+                for th in scan:
+                    far_tmp, frr_tmp, _ = compute_metrics(th)
+                    gap_val = abs(far_tmp - frr_tmp)
+                    if gap_val < best_gap:
+                        best_gap = gap_val
+                        best_th = float(th)
+            else:
+                # 二分查找 FAR≈FRR 的阈值
+                for _ in range(40):
+                    mid = 0.5 * (low + high)
+                    gap_mid = gap(mid)
+                    gap_abs = abs(gap_mid)
+                    if gap_abs < best_gap:
+                        best_gap = gap_abs
+                        best_th = mid
+                    if gap_mid > 0:
+                        high = mid
+                    else:
+                        low = mid
+
         log(f"样本数: 正={len(pos)}, 负={len(neg)}, 正均值={pos.mean():.4f}, 负均值={neg.mean():.4f}")
         if best_th is not None:
-            far_b, frr_b = compute_far_frr(best_th)
-            log(f"推荐阈值≈EER: {best_th:.4f} -> FAR={far_b:.2f}%, FRR={frr_b:.2f}% (gap={best_gap:.2f})")
+            far_b, frr_b, acc_b = compute_metrics(best_th)
+            log(f"推荐阈值≈EER: {best_th:.4f} -> FAR={far_b:.2f}%, FRR={frr_b:.2f}%, ACC={acc_b:.2f}% (gap={best_gap:.2f})")
 
         # 可选：绘制 ROC 曲线
         if args.plot_roc and pos.size and neg.size:
@@ -293,14 +328,15 @@ def main():
         log("\n" + "="*60)
         log("评估结果总结:")
         log("="*60)
-        log(f"{'阈值':<10} {'FAR (%)':<10} {'FRR (%)':<10} {'平均真实距离':<15} {'平均冒充距离':<15}")
+        log(f"{'阈值':<10} {'FAR (%)':<10} {'FRR (%)':<10} {'ACC (%)':<10} {'平均真实距离':<15} {'平均冒充距离':<15}")
         log("-"*60)
         for th in thresholds:
-            far, frr = compute_far_frr(th)
-            log(f"{th:<10.4f} {far:<10.2f} {frr:<10.2f} {pos.mean():<15.4f} {neg.mean():<15.4f}")
+            far, frr, acc = compute_metrics(th)
+            log(f"{th:<10.4f} {far:<10.2f} {frr:<10.2f} {acc:<10.2f} {pos.mean():<15.4f} {neg.mean():<15.4f}")
         if best_th is not None and not user_thresholds:
             log("-"*60)
-            log(f"推荐阈值≈EER: {best_th:.4f} (gap={best_gap:.2f})")
+            far_b, frr_b, acc_b = compute_metrics(best_th)
+            log(f"推荐阈值≈EER: {best_th:.4f} -> FAR={far_b:.2f}%, FRR={frr_b:.2f}%, ACC={acc_b:.2f}% (gap={best_gap:.2f})")
         log("="*60)
         log(f"日志已保存: {log_path}")
         log_f.close()

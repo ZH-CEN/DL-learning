@@ -72,7 +72,7 @@ def build_gallery(model, dataloader, log_func=print):
 
 def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6, log_func=print):
     """
-    评估认证模型的FAR和FRR
+    评估认证模型的 FAR / FRR / ACC
     
     Args:
         model: 特征提取模型
@@ -107,14 +107,23 @@ def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6, 
         else:
             impostor_scores.append(min_dist.item())
     
-    # 计算FAR和FRR
+    # 计算 FAR / FRR / ACC
     genuine_scores = torch.tensor(genuine_scores)
     impostor_scores = torch.tensor(impostor_scores)
 
     def compute_metrics(th):
+        if genuine_scores.numel() == 0 or impostor_scores.numel() == 0:
+            return 0.0, 0.0, 0.0
         frr = (genuine_scores > th).float().mean().item() * 100  # 误拒率
         far = (impostor_scores < th).float().mean().item() * 100  # 误识率
-        return far, frr
+
+        tp = (genuine_scores < th).float().sum().item()
+        fn = (genuine_scores >= th).float().sum().item()
+        fp = (impostor_scores < th).float().sum().item()
+        tn = (impostor_scores >= th).float().sum().item()
+        total = tp + fn + fp + tn
+        acc = (tp + tn) / total * 100 if total > 0 else 0.0
+        return far, frr, acc
 
     # 自动寻找 FAR≈FRR 的阈值，便于参考
     best_th = threshold
@@ -123,25 +132,32 @@ def evaluate_authentication(model, gallery_loader, query_loader, threshold=0.6, 
         all_scores = torch.cat([genuine_scores, impostor_scores])
         scan_thresholds = torch.linspace(all_scores.min(), all_scores.max(), steps=200)
         for th in scan_thresholds:
-            far_tmp, frr_tmp = compute_metrics(th)
+            far_tmp, frr_tmp, _ = compute_metrics(th)
             gap = abs(far_tmp - frr_tmp)
             if gap < best_gap:
                 best_gap = gap
                 best_th = th.item()
-    far, frr = compute_metrics(threshold)
+    far, frr, acc = compute_metrics(threshold)
     
     log_func(f"\n认证性能评估:")
     log_func(f"阈值: {threshold}")
     log_func(f"FRR (误拒率): {frr:.2f}%")
     log_func(f"FAR (误识率): {far:.2f}%")
+    log_func(f"ACC (认证准确率): {acc:.2f}%")
     log_func(f"平均真实距离: {genuine_scores.mean():.4f}")
     log_func(f"平均冒充距离: {impostor_scores.mean():.4f}")
-    log_func(f"推荐阈值(近似EER): {best_th:.4f} (gap={best_gap:.4f})")
+    if best_th is not None:
+        far_b, frr_b, acc_b = compute_metrics(best_th)
+        log_func(
+            f"推荐阈值(近似EER): {best_th:.4f} -> FAR={far_b:.2f}%, "
+            f"FRR={frr_b:.2f}%, ACC={acc_b:.2f}% (gap={best_gap:.4f})"
+        )
     log_func("="*60)
     
     return {
         "FRR": frr,
         "FAR": far,
+        "ACC": acc,
         "genuine_mean": genuine_scores.mean().item(),
         "impostor_mean": impostor_scores.mean().item(),
         "best_threshold": best_th,
