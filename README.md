@@ -94,7 +94,7 @@ python run.py --mode evaluate --model best_contrastive_model.pth --threshold 0.5
 
 #### 多阈值评估
 ```bash
-python run.py --mode evaluate --threshold 0.3 0.4 0.5 0.6 0.7
+python run.py --mode evaluate --threshold 0.1 0.15 0.2
 ```
 
 > MobileOne 训练/测试：在上述命令加 `--backbone mobileone`（分类/对比均可）；评估会自动读取 checkpoint 中记录的骨干类型加载 MobileOne 或 INet，无需额外参数。
