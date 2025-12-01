@@ -37,10 +37,31 @@ def train_classifier(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = get_transform(cfg)
 
-    dataset = PalmDataset(data_root, transform=transform, cache=cache)
-    train_len = int(len(dataset) * 0.8)
-    val_len = len(dataset) - train_len
-    train_set, val_set = random_split(dataset, [train_len, val_len])
+    # 按身份划分：每个ID的图片排序后 50/50 折半，避免同一ID跨 train/val 重叠
+    all_samples = sorted(Path(data_root).glob("*.bmp"))
+    id_groups: dict[str, list[Path]] = {}
+    for path in all_samples:
+        pid = PalmDataset._get_identity(path.name)
+        id_groups.setdefault(pid, []).append(path)
+
+    def split_half(paths: list[Path]):
+        paths = sorted(paths)
+        if not paths:
+            return [], []
+        mid = max(1, len(paths) // 2)
+        if mid == len(paths) and len(paths) > 1:
+            mid = len(paths) - 1
+        return paths[:mid], paths[mid:]
+
+    train_paths: list[Path] = []
+    val_paths: list[Path] = []
+    for paths in id_groups.values():
+        left, right = split_half(paths)
+        train_paths.extend(left)
+        val_paths.extend(right)
+
+    train_set = PalmDataset(data_root, transform=transform, cache=cache, samples=train_paths)
+    val_set = PalmDataset(data_root, transform=transform, cache=cache, samples=val_paths)
 
     batch_size = cfg["train"]["batch_size"]
     train_loader = DataLoader(train_set, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)

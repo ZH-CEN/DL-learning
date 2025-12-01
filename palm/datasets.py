@@ -17,16 +17,20 @@ class PalmDataset(Dataset):
     用于训练分类模型
     """
     
-    def __init__(self, root, transform=None, target_transform=None, cache=True):
+    def __init__(self, root, transform=None, target_transform=None, cache=True, samples=None):
         """
         Args:
             root: 数据集根目录
             transform: 图像转换
             target_transform: 标签转换
             cache: 是否缓存图像到内存
+            samples: 可选，预先指定的样本 Path 列表；若为 None，则从 root/*.bmp 自动收集
         """
         self.root = Path(root)
-        self.samples = sorted(self.root.glob("*.bmp"))
+        if samples is None:
+            self.samples = sorted(self.root.glob("*.bmp"))
+        else:
+            self.samples = sorted(samples)
         self.transform = transform
         self.target_transform = target_transform
         self.cache = cache
