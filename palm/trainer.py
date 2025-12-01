@@ -37,7 +37,7 @@ def train_classifier(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = get_transform(cfg)
 
-    # 按身份+手型划分：训练仅用 F 手，验证用 S 手，避免光照/手型泄漏
+    # 按身份划分：F/S 都用于训练与验证，按比例切分，避免手型被硬编码为集合区分
     all_samples = sorted(Path(data_root).glob("*.bmp"))
     id_groups: dict[str, dict[str, list[Path]]] = {}
     for path in all_samples:
@@ -46,21 +46,18 @@ def train_classifier(
         id_groups.setdefault(pid, {"F": [], "S": []})
         id_groups[pid][hand].append(path)
 
-    train_paths: list[Path] = []  # F
-    val_paths: list[Path] = []  # S
+    train_paths: list[Path] = []
+    val_paths: list[Path] = []
+    split_ratio = 0.8
     for hands in id_groups.values():
-        f_paths = sorted(hands.get("F", []))
-        s_paths = sorted(hands.get("S", []))
-        if f_paths:
-            train_paths.extend(f_paths)
-        if s_paths:
-            val_paths.extend(s_paths)
-
-    # 若没有 S 图可作验证，退化为按 80/20 切分 F
-    if not val_paths and train_paths:
-        cutoff = max(1, int(len(train_paths) * 0.8))
-        val_paths = train_paths[cutoff:]
-        train_paths = train_paths[:cutoff]
+        paths = sorted(hands.get("F", []) + hands.get("S", []))
+        if not paths:
+            continue
+        cutoff = max(1, int(len(paths) * split_ratio))
+        if cutoff >= len(paths):
+            cutoff = len(paths) - 1  # 至少留一张做验证
+        train_paths.extend(paths[:cutoff])
+        val_paths.extend(paths[cutoff:])
 
     # 固定标签映射，避免 train/val 顺序漂移
     all_ids = sorted(id_groups.keys())

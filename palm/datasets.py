@@ -92,43 +92,60 @@ class PalmDataset(Dataset):
 class AuthDataset(Dataset):
     """
     认证数据集
-    按人聚合身份，训练用 F 手，测试用 S 手，可选缓存。
+    按人聚合身份，F/S 混合后按比例切分 train/test，可选缓存。
+    支持传入固定 id2idx，保证 train/test 标签一致。
     """
 
-    def __init__(self, root, mode='train', transform=None, cache: bool = True):
+    def __init__(self, root, mode='train', transform=None, cache: bool = True, id2idx: dict | None = None, split_ratio: float = 0.5):
         """
         Args:
             root: 数据集根目录
             mode: 'train' 或 'test'
             transform: 图像转换
             cache: 是否将图像缓存到内存
+            id2idx: 可选，固定身份映射，保证 train/test 对齐
+            split_ratio: 每个身份用于 train 的比例，剩余给 test
         """
         self.root = Path(root)
         self.mode = mode
         self.transform = transform
         self.cache = cache
         self._cache_data = {}
+        self.split_ratio = split_ratio
 
         all_samples = sorted(self.root.glob("*.bmp"))
+        all_ids = sorted({self._get_identity(p.name) for p in all_samples})
+        if id2idx is None:
+            self.id2idx = {pid: idx for idx, pid in enumerate(all_ids)}
+        else:
+            self.id2idx = dict(id2idx)
+            missing = set(all_ids) - set(self.id2idx)
+            if missing:
+                raise ValueError(f"身份映射缺少: {missing}")
+
         id_groups = {}
         for path in all_samples:
             pid = self._get_identity(path.name)
-            hand = self._get_hand(path.name)
-            id_groups.setdefault(pid, {"F": [], "S": []})
-            id_groups[pid][hand].append(path)
+            id_groups.setdefault(pid, [])
+            id_groups[pid].append(path)
 
-        # 训练仅用 F，测试仅用 S，避免光照泄漏
+        def split_paths(paths):
+            paths = sorted(paths)
+            if not paths:
+                return [], []
+            cutoff = max(1, int(len(paths) * split_ratio))
+            if cutoff >= len(paths) and len(paths) > 1:
+                cutoff = len(paths) - 1
+            return paths[:cutoff], paths[cutoff:]
+
         self.samples = []
-        for _, hands in id_groups.items():
-            if mode == 'train':
-                selected = sorted(hands["F"])
-            else:
-                selected = sorted(hands["S"])
-            self.samples.extend(selected)
+        for paths in id_groups.values():
+            train_part, test_part = split_paths(paths)
+            selected = train_part if mode == 'train' else test_part
+            if selected:
+                self.samples.extend(selected)
 
         self.samples = sorted(self.samples)
-        ids = sorted({self._get_identity(p.name) for p in self.samples})
-        self.id2idx = {pid: idx for idx, pid in enumerate(ids)}
 
         if self.cache:
             for idx, path in enumerate(self.samples):
@@ -169,35 +186,46 @@ class ContrastivePairDataset(Dataset):
     """
     对比学习数据集
     返回样本对（正样本对/负样本对），可选缓存。
-    训练用 F 手，测试用 S 手。
+    F/S 混合后按比例切分 train/test。
     """
 
-    def __init__(self, root, mode='train', transform=None, cache: bool = True):
+    def __init__(self, root, mode='train', transform=None, cache: bool = True, split_ratio: float = 0.5):
         """
         Args:
             root: 数据集根目录
             mode: 'train' 或 'test'
             transform: 图像转换
             cache: 是否缓存图像
+            split_ratio: 每个身份用于 train 的比例，剩余给 test
         """
         self.root = Path(root)
         self.mode = mode
         self.transform = transform
         self.cache = cache
         self._cache_data = {}
+        self.split_ratio = split_ratio
 
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
         for path in all_samples:
             pid = self._get_identity(path.name)
-            hand = self._get_hand(path.name)
-            id_groups.setdefault(pid, {"F": [], "S": []})
-            id_groups[pid][hand].append(path)
+            id_groups.setdefault(pid, [])
+            id_groups[pid].append(path)
 
-        # 训练仅用 F，测试仅用 S
+        def split_paths(paths):
+            paths = sorted(paths)
+            if not paths:
+                return [], []
+            cutoff = max(1, int(len(paths) * split_ratio))
+            if cutoff >= len(paths) and len(paths) > 1:
+                cutoff = len(paths) - 1
+            return paths[:cutoff], paths[cutoff:]
+
+        # 按比例切分 train/test（含 F/S 混合）
         self.id_groups = {}
-        for pid, hands in id_groups.items():
-            selected = sorted(hands["F"]) if mode == 'train' else sorted(hands["S"])
+        for pid, paths in id_groups.items():
+            train_part, test_part = split_paths(paths)
+            selected = train_part if mode == 'train' else test_part
             if selected:
                 self.id_groups[pid] = selected
 
@@ -268,29 +296,39 @@ class TripletDataset(Dataset):
     """
     三元组数据集
     返回 (anchor, positive, negative)，可选缓存。
-    训练用 F 手，测试用 S 手。
+    F/S 混合后按比例切分 train/test。
     """
 
-    def __init__(self, root, mode="train", transform=None, cache: bool = True):
+    def __init__(self, root, mode="train", transform=None, cache: bool = True, split_ratio: float = 0.5):
         assert mode in {"train", "test"}
         self.root = Path(root)
         self.mode = mode
         self.transform = transform
         self.cache = cache
         self._cache_data = {}
+        self.split_ratio = split_ratio
 
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
         for path in all_samples:
             pid = self._get_identity(path.name)
-            hand = self._get_hand(path.name)
-            id_groups.setdefault(pid, {"F": [], "S": []})
-            id_groups[pid][hand].append(path)
+            id_groups.setdefault(pid, [])
+            id_groups[pid].append(path)
 
-        # 训练仅用 F，测试仅用 S
+        def split_paths(paths):
+            paths = sorted(paths)
+            if not paths:
+                return [], []
+            cutoff = max(1, int(len(paths) * split_ratio))
+            if cutoff >= len(paths) and len(paths) > 1:
+                cutoff = len(paths) - 1
+            return paths[:cutoff], paths[cutoff:]
+
+        # 按比例切分 train/test（含 F/S 混合）
         self.id_groups = {}
-        for pid, hands in id_groups.items():
-            selected = sorted(hands["F"]) if mode == "train" else sorted(hands["S"])
+        for pid, paths in id_groups.items():
+            train_part, test_part = split_paths(paths)
+            selected = train_part if mode == "train" else test_part
             if selected:
                 self.id_groups[pid] = selected
         self.ids = list(self.id_groups.keys())
