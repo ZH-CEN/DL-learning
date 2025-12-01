@@ -23,7 +23,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from palm.config import load_config, get_transform, set_seed
-from palm.datasets import AuthDataset
+from palm.datasets import AuthDataset, ContrastivePairDataset
 from palm.models import INet
 from palm.trainer import train_classifier, train_contrastive, train_arcface_contrastive
 from palm.evaluate import evaluate_authentication
@@ -201,39 +201,69 @@ def main():
             model = INet(feature_dim=args.feature_dim).to(device)
             model.load_state_dict(checkpoint)
         
-        # 准备数据，共享 id2idx，避免 train/test 标签映射不一致
-        from palm.datasets import AuthDataset
-        from pathlib import Path as _Path
-
+        # 准备数据：使用 ContrastivePairDataset 的 test split，评估与训练验证一致（成对评估）
         transform = get_transform(cfg)
-        all_ids = sorted({AuthDataset._get_identity(p.name) for p in _Path(args.data_root).glob("*.bmp")})
-        shared_id2idx = {pid: idx for idx, pid in enumerate(all_ids)}
-
-        gallery_set = AuthDataset(args.data_root, mode='train', transform=transform, cache=args.cache, id2idx=shared_id2idx)
-        query_set = AuthDataset(args.data_root, mode='test', transform=transform, cache=args.cache, id2idx=shared_id2idx)
+        test_set = ContrastivePairDataset(args.data_root, mode='test', transform=transform, cache=args.cache)
+        test_loader = DataLoader(
+            test_set, batch_size=cfg['test']['batch_size'], shuffle=False, num_workers=args.num_workers
+        )
         
-        gallery_loader = DataLoader(gallery_set, batch_size=cfg['train']['batch_size'], 
-                                    shuffle=False, num_workers=args.num_workers)
-        query_loader = DataLoader(query_set, batch_size=cfg['test']['batch_size'], 
-                                  shuffle=False, num_workers=args.num_workers)
-        
-        # 多个阈值评估
         thresholds = args.threshold if isinstance(args.threshold, list) else [args.threshold]
-        
-        results = []
-        for threshold in thresholds:
-            result = evaluate_authentication(model, gallery_loader, query_loader, threshold=threshold, log_func=log)
-            results.append((threshold, result))
-        
-        # 输出总结
+        pos_distances = []
+        neg_distances = []
+
+        # 先计算一次所有距离
+        with torch.no_grad():
+            for img1, img2, labels in test_loader:
+                img1, img2, labels = img1.to(device), img2.to(device), labels.to(device)
+                feats1 = model(img1)
+                feats2 = model(img2)
+                f1 = torch.nn.functional.normalize(feats1, p=2, dim=1)
+                f2 = torch.nn.functional.normalize(feats2, p=2, dim=1)
+                dist = 1 - torch.nn.functional.cosine_similarity(f1, f2)
+                for d, lbl in zip(dist, labels):
+                    if lbl == 1.0:
+                        pos_distances.append(d.item())
+                    else:
+                        neg_distances.append(d.item())
+
+        import numpy as np
+        pos = np.array(pos_distances)
+        neg = np.array(neg_distances)
+
+        def compute_far_frr(th):
+            far = float((neg < th).mean() * 100) if neg.size else 0.0
+            frr = float((pos > th).mean() * 100) if pos.size else 0.0
+            return far, frr
+
+        # 扫描推荐阈值
+        best_th, best_gap = None, float("inf")
+        if pos.size and neg.size:
+            all_scores = np.concatenate([pos, neg])
+            scan = np.linspace(all_scores.min(), all_scores.max(), num=200)
+            for th in scan:
+                far_tmp, frr_tmp = compute_far_frr(th)
+                gap = abs(far_tmp - frr_tmp)
+                if gap < best_gap:
+                    best_gap = gap
+                    best_th = th
+        log(f"样本数: 正={len(pos)}, 负={len(neg)}, 正均值={pos.mean():.4f}, 负均值={neg.mean():.4f}")
+        if best_th is not None:
+            far_b, frr_b = compute_far_frr(best_th)
+            log(f"推荐阈值≈EER: {best_th:.4f} -> FAR={far_b:.2f}%, FRR={frr_b:.2f}% (gap={best_gap:.2f})")
+
+        # 按传入阈值输出
         log("\n" + "="*60)
         log("评估结果总结:")
         log("="*60)
         log(f"{'阈值':<10} {'FAR (%)':<10} {'FRR (%)':<10} {'平均真实距离':<15} {'平均冒充距离':<15}")
         log("-"*60)
-        for threshold, result in results:
-            log(f"{threshold:<10.2f} {result['FAR']:<10.2f} {result['FRR']:<10.2f} "
-                f"{result['genuine_mean']:<15.4f} {result['impostor_mean']:<15.4f}")
+        for th in thresholds:
+            far, frr = compute_far_frr(th)
+            log(f"{th:<10.4f} {far:<10.2f} {frr:<10.2f} {pos.mean():<15.4f} {neg.mean():<15.4f}")
+        if best_th is not None:
+            log("-"*60)
+            log(f"推荐阈值≈EER: {best_th:.4f} (gap={best_gap:.2f})")
         log("="*60)
         log(f"日志已保存: {log_path}")
         log_f.close()
