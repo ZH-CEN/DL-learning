@@ -298,7 +298,7 @@ def main():
             fpr_list = []
             tpr_list = []
             for th in scan:
-                far, frr = compute_far_frr(th)
+                far, frr, _ = compute_metrics(th)
                 fpr_list.append(far / 100)
                 tpr_list.append(1 - frr / 100)
             auc = float(np.trapz(tpr_list, fpr_list))

@@ -1,0 +1,518 @@
+开始训练度量学习模型 - loss=contrastive, margin=0.5, feature_dim=128, batch_size=128, backbone=resnet18
+超参: epochs=100, lr=0.001, weight_decay=0.0001, lr_step=15, lr_gamma=0.5, num_workers=4, cache=True
+模型结构:
+  ResNetBackbone(
+    (stem): Sequential(
+      (0): Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+      (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (2): ReLU(inplace=True)
+      (3): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+      (4): Sequential(
+        (0): BasicBlock(
+          (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+        (1): BasicBlock(
+          (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+      (5): Sequential(
+        (0): BasicBlock(
+          (conv1): Conv2d(64, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (downsample): Sequential(
+            (0): Conv2d(64, 128, kernel_size=(1, 1), stride=(2, 2), bias=False)
+            (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+        (1): BasicBlock(
+          (conv1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+      (6): Sequential(
+        (0): BasicBlock(
+          (conv1): Conv2d(128, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (downsample): Sequential(
+            (0): Conv2d(128, 256, kernel_size=(1, 1), stride=(2, 2), bias=False)
+            (1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+        (1): BasicBlock(
+          (conv1): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+      (7): Sequential(
+        (0): BasicBlock(
+          (conv1): Conv2d(256, 512, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (downsample): Sequential(
+            (0): Conv2d(256, 512, kernel_size=(1, 1), stride=(2, 2), bias=False)
+            (1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+        (1): BasicBlock(
+          (conv1): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (relu): ReLU(inplace=True)
+          (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+          (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+    (pool): AdaptiveAvgPool2d(output_size=(1, 1))
+    (projection): Linear(in_features=512, out_features=128, bias=True)
+  )
+============================================================
+Epoch 1: Train Loss=0.0375, Val Loss=0.0235, Val Acc=86.54%
+  正样本距离: 0.0575, 负样本距离: 0.5556
+  阈值=margin/2=0.2500 -> FAR=22.65%, FRR=4.28%
+  推荐阈值≈EER: 0.1354 -> FAR=11.39%, FRR=12.06% (gap=0.67)
+✓ 保存最佳模型，验证损失: 0.0235, 准确率: 86.54% -> best_contrastive_resnet18.pth
+Epoch 2: Train Loss=0.0171, Val Loss=0.0147, Val Acc=91.53%
+  正样本距离: 0.0508, 负样本距离: 0.7445
+  阈值=margin/2=0.2500 -> FAR=13.98%, FRR=2.96%
+  推荐阈值≈EER: 0.1556 -> FAR=6.87%, FRR=6.87% (gap=0.00)
+✓ 保存最佳模型，验证损失: 0.0147, 准确率: 91.53% -> best_contrastive_resnet18.pth
+Epoch 3: Train Loss=0.0134, Val Loss=0.0115, Val Acc=93.59%
+  正样本距离: 0.0381, 负样本距离: 0.7926
+  阈值=margin/2=0.2500 -> FAR=11.49%, FRR=1.32%
+  推荐阈值≈EER: 0.1358 -> FAR=4.90%, FRR=4.36% (gap=0.54)
+✓ 保存最佳模型，验证损失: 0.0115, 准确率: 93.59% -> best_contrastive_resnet18.pth
+Epoch 4: Train Loss=0.0084, Val Loss=0.0088, Val Acc=94.92%
+  正样本距离: 0.0306, 负样本距离: 0.7797
+  阈值=margin/2=0.2500 -> FAR=9.47%, FRR=0.70%
+  推荐阈值≈EER: 0.1283 -> FAR=2.72%, FRR=3.11% (gap=0.39)
+✓ 保存最佳模型，验证损失: 0.0088, 准确率: 94.92% -> best_contrastive_resnet18.pth
+Epoch 5: Train Loss=0.0085, Val Loss=0.0081, Val Acc=95.58%
+  正样本距离: 0.0362, 负样本距离: 0.7980
+  阈值=margin/2=0.2500 -> FAR=7.70%, FRR=1.14%
+  推荐阈值≈EER: 0.1491 -> FAR=3.19%, FRR=3.48% (gap=0.29)
+✓ 保存最佳模型，验证损失: 0.0081, 准确率: 95.58% -> best_contrastive_resnet18.pth
+Epoch 6: Train Loss=0.0077, Val Loss=0.0073, Val Acc=95.99%
+  正样本距离: 0.0297, 负样本距离: 0.8241
+  阈值=margin/2=0.2500 -> FAR=7.70%, FRR=0.31%
+  推荐阈值≈EER: 0.1363 -> FAR=2.65%, FRR=2.62% (gap=0.03)
+✓ 保存最佳模型，验证损失: 0.0073, 准确率: 95.99% -> best_contrastive_resnet18.pth
+Epoch 7: Train Loss=0.0082, Val Loss=0.0078, Val Acc=95.91%
+  正样本距离: 0.0361, 负样本距离: 0.8447
+  阈值=margin/2=0.2500 -> FAR=7.32%, FRR=0.86%
+  推荐阈值≈EER: 0.1587 -> FAR=3.32%, FRR=3.48% (gap=0.16)
+Epoch 8: Train Loss=0.0060, Val Loss=0.0068, Val Acc=96.43%
+  正样本距离: 0.0357, 负样本距离: 0.8553
+  阈值=margin/2=0.2500 -> FAR=5.97%, FRR=1.17%
+  推荐阈值≈EER: 0.1695 -> FAR=2.88%, FRR=2.59% (gap=0.29)
+✓ 保存最佳模型，验证损失: 0.0068, 准确率: 96.43% -> best_contrastive_resnet18.pth
+Epoch 9: Train Loss=0.0062, Val Loss=0.0072, Val Acc=95.90%
+  正样本距离: 0.0307, 负样本距离: 0.8741
+  阈值=margin/2=0.2500 -> FAR=7.26%, FRR=0.93%
+  推荐阈值≈EER: 0.1434 -> FAR=2.46%, FRR=2.75% (gap=0.29)
+Epoch 10: Train Loss=0.0082, Val Loss=0.0092, Val Acc=94.73%
+  正样本距离: 0.0287, 负样本距离: 0.7381
+  阈值=margin/2=0.2500 -> FAR=9.88%, FRR=0.65%
+  推荐阈值≈EER: 0.1227 -> FAR=2.98%, FRR=3.27% (gap=0.29)
+Epoch 11: Train Loss=0.0073, Val Loss=0.0068, Val Acc=96.43%
+  正样本距离: 0.0348, 负样本距离: 0.8150
+  阈值=margin/2=0.2500 -> FAR=6.23%, FRR=0.91%
+  推荐阈值≈EER: 0.1531 -> FAR=2.62%, FRR=2.88% (gap=0.26)
+✓ 保存最佳模型，验证损失: 0.0068, 准确率: 96.43% -> best_contrastive_resnet18.pth
+Epoch 12: Train Loss=0.0059, Val Loss=0.0055, Val Acc=97.15%
+  正样本距离: 0.0277, 负样本距离: 0.8620
+  阈值=margin/2=0.2500 -> FAR=5.42%, FRR=0.29%
+  推荐阈值≈EER: 0.1463 -> FAR=1.79%, FRR=1.63% (gap=0.16)
+✓ 保存最佳模型，验证损失: 0.0055, 准确率: 97.15% -> best_contrastive_resnet18.pth
+Epoch 13: Train Loss=0.0061, Val Loss=0.0075, Val Acc=95.65%
+  正样本距离: 0.0234, 负样本距离: 0.7855
+  阈值=margin/2=0.2500 -> FAR=8.46%, FRR=0.23%
+  推荐阈值≈EER: 0.1189 -> FAR=2.00%, FRR=1.95% (gap=0.05)
+Epoch 14: Train Loss=0.0056, Val Loss=0.0059, Val Acc=97.00%
+  正样本距离: 0.0333, 负样本距离: 0.8431
+  阈值=margin/2=0.2500 -> FAR=5.32%, FRR=0.67%
+  推荐阈值≈EER: 0.1580 -> FAR=2.18%, FRR=2.36% (gap=0.18)
+Epoch 15: Train Loss=0.0074, Val Loss=0.0062, Val Acc=96.73%
+  正样本距离: 0.0401, 负样本距离: 0.9533
+  阈值=margin/2=0.2500 -> FAR=5.58%, FRR=0.96%
+  推荐阈值≈EER: 0.1812 -> FAR=2.98%, FRR=2.62% (gap=0.36)
+Epoch 16: Train Loss=0.0051, Val Loss=0.0057, Val Acc=96.93%
+  正样本距离: 0.0257, 负样本距离: 0.8506
+  阈值=margin/2=0.2500 -> FAR=5.68%, FRR=0.47%
+  推荐阈值≈EER: 0.1366 -> FAR=1.58%, FRR=1.82% (gap=0.23)
+Epoch 17: Train Loss=0.0048, Val Loss=0.0055, Val Acc=96.94%
+  正样本距离: 0.0274, 负样本距离: 0.8879
+  阈值=margin/2=0.2500 -> FAR=5.50%, FRR=0.62%
+  推荐阈值≈EER: 0.1514 -> FAR=1.82%, FRR=1.71% (gap=0.10)
+✓ 保存最佳模型，验证损失: 0.0055, 准确率: 96.94% -> best_contrastive_resnet18.pth
+Epoch 18: Train Loss=0.0047, Val Loss=0.0044, Val Acc=97.86%
+  正样本距离: 0.0306, 负样本距离: 0.8612
+  阈值=margin/2=0.2500 -> FAR=3.87%, FRR=0.42%
+  推荐阈值≈EER: 0.1703 -> FAR=1.58%, FRR=1.45% (gap=0.13)
+✓ 保存最佳模型，验证损失: 0.0044, 准确率: 97.86% -> best_contrastive_resnet18.pth
+Epoch 19: Train Loss=0.0041, Val Loss=0.0039, Val Acc=98.15%
+  正样本距离: 0.0295, 负样本距离: 0.9151
+  阈值=margin/2=0.2500 -> FAR=3.45%, FRR=0.26%
+  推荐阈值≈EER: 0.1618 -> FAR=1.27%, FRR=1.48% (gap=0.21)
+✓ 保存最佳模型，验证损失: 0.0039, 准确率: 98.15% -> best_contrastive_resnet18.pth
+Epoch 20: Train Loss=0.0043, Val Loss=0.0043, Val Acc=98.27%
+  正样本距离: 0.0361, 负样本距离: 0.9481
+  阈值=margin/2=0.2500 -> FAR=2.70%, FRR=0.75%
+  推荐阈值≈EER: 0.1908 -> FAR=1.69%, FRR=1.45% (gap=0.23)
+Epoch 21: Train Loss=0.0039, Val Loss=0.0070, Val Acc=96.24%
+  正样本距离: 0.0351, 负样本距离: 0.8455
+  阈值=margin/2=0.2500 -> FAR=6.69%, FRR=0.83%
+  推荐阈值≈EER: 0.1633 -> FAR=2.59%, FRR=2.70% (gap=0.10)
+Epoch 22: Train Loss=0.0043, Val Loss=0.0035, Val Acc=98.51%
+  正样本距离: 0.0290, 负样本距离: 0.8998
+  阈值=margin/2=0.2500 -> FAR=2.80%, FRR=0.18%
+  推荐阈值≈EER: 0.1626 -> FAR=0.88%, FRR=0.93% (gap=0.05)
+✓ 保存最佳模型，验证损失: 0.0035, 准确率: 98.51% -> best_contrastive_resnet18.pth
+Epoch 23: Train Loss=0.0043, Val Loss=0.0044, Val Acc=97.81%
+  正样本距离: 0.0295, 负样本距离: 0.8679
+  阈值=margin/2=0.2500 -> FAR=4.12%, FRR=0.26%
+  推荐阈值≈EER: 0.1613 -> FAR=1.32%, FRR=1.17% (gap=0.16)
+Epoch 24: Train Loss=0.0044, Val Loss=0.0067, Val Acc=96.58%
+  正样本距离: 0.0299, 负样本距离: 0.7280
+  阈值=margin/2=0.2500 -> FAR=6.46%, FRR=0.39%
+  推荐阈值≈EER: 0.1600 -> FAR=1.89%, FRR=2.02% (gap=0.13)
+Epoch 25: Train Loss=0.0046, Val Loss=0.0053, Val Acc=97.30%
+  正样本距离: 0.0321, 负样本距离: 0.8955
+  阈值=margin/2=0.2500 -> FAR=4.67%, FRR=0.73%
+  推荐阈值≈EER: 0.1608 -> FAR=2.05%, FRR=1.87% (gap=0.18)
+Epoch 26: Train Loss=0.0043, Val Loss=0.0046, Val Acc=97.81%
+  正样本距离: 0.0331, 负样本距离: 0.8975
+  阈值=margin/2=0.2500 -> FAR=3.66%, FRR=0.73%
+  推荐阈值≈EER: 0.1760 -> FAR=1.74%, FRR=1.66% (gap=0.08)
+Epoch 27: Train Loss=0.0039, Val Loss=0.0043, Val Acc=97.89%
+  正样本距离: 0.0332, 负样本距离: 0.9078
+  阈值=margin/2=0.2500 -> FAR=3.32%, FRR=0.91%
+  推荐阈值≈EER: 0.1908 -> FAR=1.58%, FRR=1.56% (gap=0.03)
+Epoch 28: Train Loss=0.0039, Val Loss=0.0032, Val Acc=98.69%
+  正样本距离: 0.0338, 负样本距离: 0.9652
+  阈值=margin/2=0.2500 -> FAR=2.18%, FRR=0.44%
+  推荐阈值≈EER: 0.1904 -> FAR=1.01%, FRR=1.06% (gap=0.05)
+✓ 保存最佳模型，验证损失: 0.0032, 准确率: 98.69% -> best_contrastive_resnet18.pth
+Epoch 29: Train Loss=0.0035, Val Loss=0.0045, Val Acc=97.89%
+  正样本距离: 0.0325, 负样本距离: 0.8820
+  阈值=margin/2=0.2500 -> FAR=3.89%, FRR=0.34%
+  推荐阈值≈EER: 0.1630 -> FAR=1.45%, FRR=1.27% (gap=0.18)
+Epoch 30: Train Loss=0.0044, Val Loss=0.0044, Val Acc=97.92%
+  正样本距离: 0.0295, 负样本距离: 0.8372
+  阈值=margin/2=0.2500 -> FAR=3.71%, FRR=0.44%
+  推荐阈值≈EER: 0.1648 -> FAR=1.27%, FRR=1.27% (gap=0.00)
+Epoch 31: Train Loss=0.0030, Val Loss=0.0025, Val Acc=99.09%
+  正样本距离: 0.0312, 负样本距离: 0.9658
+  阈值=margin/2=0.2500 -> FAR=1.63%, FRR=0.18%
+  推荐阈值≈EER: 0.1825 -> FAR=0.57%, FRR=0.78% (gap=0.21)
+✓ 保存最佳模型，验证损失: 0.0025, 准确率: 99.09% -> best_contrastive_resnet18.pth
+Epoch 32: Train Loss=0.0028, Val Loss=0.0026, Val Acc=99.12%
+  正样本距离: 0.0328, 负样本距离: 0.9694
+  阈值=margin/2=0.2500 -> FAR=1.32%, FRR=0.44%
+  推荐阈值≈EER: 0.2069 -> FAR=0.75%, FRR=0.70% (gap=0.05)
+Epoch 33: Train Loss=0.0029, Val Loss=0.0033, Val Acc=98.53%
+  正样本距离: 0.0311, 负样本距离: 0.9334
+  阈值=margin/2=0.2500 -> FAR=2.70%, FRR=0.23%
+  推荐阈值≈EER: 0.1635 -> FAR=1.09%, FRR=1.09% (gap=0.00)
+Epoch 34: Train Loss=0.0026, Val Loss=0.0030, Val Acc=98.68%
+  正样本距离: 0.0314, 负样本距离: 0.9398
+  阈值=margin/2=0.2500 -> FAR=2.23%, FRR=0.42%
+  推荐阈值≈EER: 0.1778 -> FAR=0.99%, FRR=0.83% (gap=0.16)
+Epoch 35: Train Loss=0.0028, Val Loss=0.0029, Val Acc=98.90%
+  正样本距离: 0.0309, 负样本距离: 0.9320
+  阈值=margin/2=0.2500 -> FAR=1.82%, FRR=0.39%
+  推荐阈值≈EER: 0.1887 -> FAR=0.93%, FRR=0.96% (gap=0.03)
+Epoch 36: Train Loss=0.0027, Val Loss=0.0033, Val Acc=98.68%
+  正样本距离: 0.0299, 负样本距离: 0.8896
+  阈值=margin/2=0.2500 -> FAR=2.28%, FRR=0.36%
+  推荐阈值≈EER: 0.1759 -> FAR=0.96%, FRR=0.93% (gap=0.03)
+Epoch 37: Train Loss=0.0027, Val Loss=0.0034, Val Acc=98.44%
+  正样本距离: 0.0324, 负样本距离: 0.9192
+  阈值=margin/2=0.2500 -> FAR=2.33%, FRR=0.78%
+  推荐阈值≈EER: 0.1873 -> FAR=1.12%, FRR=1.27% (gap=0.16)
+Epoch 38: Train Loss=0.0026, Val Loss=0.0027, Val Acc=99.21%
+  正样本距离: 0.0311, 负样本距离: 0.9465
+  阈值=margin/2=0.2500 -> FAR=1.43%, FRR=0.16%
+  推荐阈值≈EER: 0.1889 -> FAR=0.67%, FRR=0.67% (gap=0.00)
+Epoch 39: Train Loss=0.0026, Val Loss=0.0029, Val Acc=98.90%
+  正样本距离: 0.0309, 负样本距离: 0.9693
+  阈值=margin/2=0.2500 -> FAR=1.95%, FRR=0.26%
+  推荐阈值≈EER: 0.1773 -> FAR=0.96%, FRR=0.86% (gap=0.10)
+Epoch 40: Train Loss=0.0027, Val Loss=0.0028, Val Acc=99.11%
+  正样本距离: 0.0334, 负样本距离: 0.9234
+  阈值=margin/2=0.2500 -> FAR=1.43%, FRR=0.36%
+  推荐阈值≈EER: 0.1966 -> FAR=0.65%, FRR=0.70% (gap=0.05)
+Epoch 41: Train Loss=0.0025, Val Loss=0.0030, Val Acc=98.82%
+  正样本距离: 0.0324, 负样本距离: 0.9189
+  阈值=margin/2=0.2500 -> FAR=1.79%, FRR=0.57%
+  推荐阈值≈EER: 0.1978 -> FAR=1.01%, FRR=0.93% (gap=0.08)
+Epoch 42: Train Loss=0.0026, Val Loss=0.0038, Val Acc=98.21%
+  正样本距离: 0.0306, 负样本距离: 0.8709
+  阈值=margin/2=0.2500 -> FAR=3.16%, FRR=0.42%
+  推荐阈值≈EER: 0.1690 -> FAR=1.30%, FRR=1.40% (gap=0.10)
+Epoch 43: Train Loss=0.0026, Val Loss=0.0029, Val Acc=99.03%
+  正样本距离: 0.0334, 负样本距离: 0.9065
+  阈值=margin/2=0.2500 -> FAR=1.53%, FRR=0.42%
+  推荐阈值≈EER: 0.2020 -> FAR=0.91%, FRR=0.86% (gap=0.05)
+Epoch 44: Train Loss=0.0029, Val Loss=0.0035, Val Acc=98.55%
+  正样本距离: 0.0332, 负样本距离: 0.9231
+  阈值=margin/2=0.2500 -> FAR=2.41%, FRR=0.49%
+  推荐阈值≈EER: 0.1845 -> FAR=1.27%, FRR=1.45% (gap=0.18)
+Epoch 45: Train Loss=0.0023, Val Loss=0.0030, Val Acc=98.87%
+  正样本距离: 0.0338, 负样本距离: 0.9081
+  阈值=margin/2=0.2500 -> FAR=1.79%, FRR=0.47%
+  推荐阈值≈EER: 0.1955 -> FAR=0.93%, FRR=0.96% (gap=0.03)
+Epoch 46: Train Loss=0.0021, Val Loss=0.0021, Val Acc=99.26%
+  正样本距离: 0.0308, 负样本距离: 0.9757
+  阈值=margin/2=0.2500 -> FAR=1.14%, FRR=0.34%
+  推荐阈值≈EER: 0.1860 -> FAR=0.65%, FRR=0.57% (gap=0.08)
+✓ 保存最佳模型，验证损失: 0.0021, 准确率: 99.26% -> best_contrastive_resnet18.pth
+Epoch 47: Train Loss=0.0019, Val Loss=0.0023, Val Acc=99.25%
+  正样本距离: 0.0304, 负样本距离: 0.9713
+  阈值=margin/2=0.2500 -> FAR=1.17%, FRR=0.34%
+  推荐阈值≈EER: 0.1927 -> FAR=0.54%, FRR=0.62% (gap=0.08)
+Epoch 48: Train Loss=0.0017, Val Loss=0.0023, Val Acc=99.26%
+  正样本距离: 0.0318, 负样本距离: 0.9914
+  阈值=margin/2=0.2500 -> FAR=1.06%, FRR=0.42%
+  推荐阈值≈EER: 0.2148 -> FAR=0.65%, FRR=0.62% (gap=0.03)
+Epoch 49: Train Loss=0.0017, Val Loss=0.0025, Val Acc=99.07%
+  正样本距离: 0.0285, 负样本距离: 0.8828
+  阈值=margin/2=0.2500 -> FAR=1.79%, FRR=0.08%
+  推荐阈值≈EER: 0.1745 -> FAR=0.73%, FRR=0.60% (gap=0.13)
+Epoch 50: Train Loss=0.0020, Val Loss=0.0022, Val Acc=99.26%
+  正样本距离: 0.0316, 负样本距离: 0.9780
+  阈值=margin/2=0.2500 -> FAR=1.25%, FRR=0.23%
+  推荐阈值≈EER: 0.1868 -> FAR=0.47%, FRR=0.57% (gap=0.10)
+Epoch 51: Train Loss=0.0017, Val Loss=0.0023, Val Acc=99.16%
+  正样本距离: 0.0317, 负样本距离: 0.9807
+  阈值=margin/2=0.2500 -> FAR=1.30%, FRR=0.39%
+  推荐阈值≈EER: 0.1964 -> FAR=0.75%, FRR=0.75% (gap=0.00)
+Epoch 52: Train Loss=0.0019, Val Loss=0.0021, Val Acc=99.20%
+  正样本距离: 0.0314, 负样本距离: 0.9695
+  阈值=margin/2=0.2500 -> FAR=1.12%, FRR=0.49%
+  推荐阈值≈EER: 0.2171 -> FAR=0.62%, FRR=0.57% (gap=0.05)
+✓ 保存最佳模型，验证损失: 0.0021, 准确率: 99.20% -> best_contrastive_resnet18.pth
+Epoch 53: Train Loss=0.0018, Val Loss=0.0021, Val Acc=99.31%
+  正样本距离: 0.0322, 负样本距离: 0.9778
+  阈值=margin/2=0.2500 -> FAR=1.12%, FRR=0.26%
+  推荐阈值≈EER: 0.2086 -> FAR=0.54%, FRR=0.49% (gap=0.05)
+✓ 保存最佳模型，验证损失: 0.0021, 准确率: 99.31% -> best_contrastive_resnet18.pth
+Epoch 54: Train Loss=0.0017, Val Loss=0.0021, Val Acc=99.26%
+  正样本距离: 0.0313, 负样本距离: 0.9758
+  阈值=margin/2=0.2500 -> FAR=1.17%, FRR=0.31%
+  推荐阈值≈EER: 0.1916 -> FAR=0.57%, FRR=0.52% (gap=0.05)
+✓ 保存最佳模型，验证损失: 0.0021, 准确率: 99.26% -> best_contrastive_resnet18.pth
+Epoch 55: Train Loss=0.0016, Val Loss=0.0023, Val Acc=99.17%
+  正样本距离: 0.0311, 负样本距离: 0.9891
+  阈值=margin/2=0.2500 -> FAR=1.35%, FRR=0.31%
+  推荐阈值≈EER: 0.1868 -> FAR=0.67%, FRR=0.60% (gap=0.08)
+Epoch 56: Train Loss=0.0015, Val Loss=0.0021, Val Acc=99.33%
+  正样本距离: 0.0298, 负样本距离: 0.9690
+  阈值=margin/2=0.2500 -> FAR=1.14%, FRR=0.21%
+  推荐阈值≈EER: 0.1910 -> FAR=0.54%, FRR=0.52% (gap=0.03)
+✓ 保存最佳模型，验证损失: 0.0021, 准确率: 99.33% -> best_contrastive_resnet18.pth
+Epoch 57: Train Loss=0.0015, Val Loss=0.0026, Val Acc=98.91%
+  正样本距离: 0.0304, 负样本距离: 0.9280
+  阈值=margin/2=0.2500 -> FAR=1.74%, FRR=0.44%
+  推荐阈值≈EER: 0.1849 -> FAR=0.70%, FRR=0.75% (gap=0.05)
+Epoch 58: Train Loss=0.0017, Val Loss=0.0023, Val Acc=99.21%
+  正样本距离: 0.0314, 负样本距离: 0.9448
+  阈值=margin/2=0.2500 -> FAR=1.06%, FRR=0.52%
+  推荐阈值≈EER: 0.2217 -> FAR=0.70%, FRR=0.65% (gap=0.05)
+Epoch 59: Train Loss=0.0014, Val Loss=0.0023, Val Acc=99.27%
+  正样本距离: 0.0312, 负样本距离: 0.9452
+  阈值=margin/2=0.2500 -> FAR=1.32%, FRR=0.13%
+  推荐阈值≈EER: 0.1952 -> FAR=0.54%, FRR=0.65% (gap=0.10)
+Epoch 60: Train Loss=0.0015, Val Loss=0.0019, Val Acc=99.44%
+  正样本距离: 0.0316, 负样本距离: 0.9885
+  阈值=margin/2=0.2500 -> FAR=0.83%, FRR=0.29%
+  推荐阈值≈EER: 0.2124 -> FAR=0.42%, FRR=0.42% (gap=0.00)
+✓ 保存最佳模型，验证损失: 0.0019, 准确率: 99.44% -> best_contrastive_resnet18.pth
+Epoch 61: Train Loss=0.0013, Val Loss=0.0017, Val Acc=99.55%
+  正样本距离: 0.0302, 负样本距离: 0.9705
+  阈值=margin/2=0.2500 -> FAR=0.80%, FRR=0.10%
+  推荐阈值≈EER: 0.1924 -> FAR=0.36%, FRR=0.34% (gap=0.03)
+✓ 保存最佳模型，验证损失: 0.0017, 准确率: 99.55% -> best_contrastive_resnet18.pth
+Epoch 62: Train Loss=0.0014, Val Loss=0.0018, Val Acc=99.51%
+  正样本距离: 0.0311, 负样本距离: 0.9790
+  阈值=margin/2=0.2500 -> FAR=0.67%, FRR=0.31%
+  推荐阈值≈EER: 0.2218 -> FAR=0.39%, FRR=0.44% (gap=0.05)
+Epoch 63: Train Loss=0.0011, Val Loss=0.0020, Val Acc=99.34%
+  正样本距离: 0.0306, 负样本距离: 0.9797
+  阈值=margin/2=0.2500 -> FAR=0.93%, FRR=0.39%
+  推荐阈值≈EER: 0.1923 -> FAR=0.62%, FRR=0.54% (gap=0.08)
+Epoch 64: Train Loss=0.0012, Val Loss=0.0020, Val Acc=99.36%
+  正样本距离: 0.0315, 负样本距离: 0.9593
+  阈值=margin/2=0.2500 -> FAR=0.99%, FRR=0.29%
+  推荐阈值≈EER: 0.2014 -> FAR=0.44%, FRR=0.39% (gap=0.05)
+Epoch 65: Train Loss=0.0014, Val Loss=0.0019, Val Acc=99.46%
+  正样本距离: 0.0322, 负样本距离: 0.9817
+  阈值=margin/2=0.2500 -> FAR=0.65%, FRR=0.44%
+  推荐阈值≈EER: 0.2401 -> FAR=0.57%, FRR=0.54% (gap=0.03)
+Epoch 66: Train Loss=0.0012, Val Loss=0.0019, Val Acc=99.48%
+  正样本距离: 0.0319, 负样本距离: 0.9830
+  阈值=margin/2=0.2500 -> FAR=0.75%, FRR=0.29%
+  推荐阈值≈EER: 0.2164 -> FAR=0.52%, FRR=0.44% (gap=0.08)
+Epoch 67: Train Loss=0.0013, Val Loss=0.0019, Val Acc=99.47%
+  正样本距离: 0.0321, 负样本距离: 0.9794
+  阈值=margin/2=0.2500 -> FAR=0.73%, FRR=0.34%
+  推荐阈值≈EER: 0.2052 -> FAR=0.52%, FRR=0.52% (gap=0.00)
+Epoch 68: Train Loss=0.0012, Val Loss=0.0018, Val Acc=99.55%
+  正样本距离: 0.0321, 负样本距离: 0.9853
+  阈值=margin/2=0.2500 -> FAR=0.57%, FRR=0.34%
+  推荐阈值≈EER: 0.2287 -> FAR=0.44%, FRR=0.39% (gap=0.05)
+Epoch 69: Train Loss=0.0012, Val Loss=0.0018, Val Acc=99.46%
+  正样本距离: 0.0322, 负样本距离: 0.9730
+  阈值=margin/2=0.2500 -> FAR=0.96%, FRR=0.13%
+  推荐阈值≈EER: 0.2121 -> FAR=0.44%, FRR=0.39% (gap=0.05)
+Epoch 70: Train Loss=0.0012, Val Loss=0.0017, Val Acc=99.53%
+  正样本距离: 0.0309, 负样本距离: 0.9808
+  阈值=margin/2=0.2500 -> FAR=0.75%, FRR=0.18%
+  推荐阈值≈EER: 0.1789 -> FAR=0.31%, FRR=0.31% (gap=0.00)
+Epoch 71: Train Loss=0.0014, Val Loss=0.0016, Val Acc=99.62%
+  正样本距离: 0.0305, 负样本距离: 0.9837
+  阈值=margin/2=0.2500 -> FAR=0.60%, FRR=0.16%
+  推荐阈值≈EER: 0.2065 -> FAR=0.26%, FRR=0.29% (gap=0.03)
+✓ 保存最佳模型，验证损失: 0.0016, 准确率: 99.62% -> best_contrastive_resnet18.pth
+Epoch 72: Train Loss=0.0011, Val Loss=0.0020, Val Acc=99.36%
+  正样本距离: 0.0322, 负样本距离: 0.9861
+  阈值=margin/2=0.2500 -> FAR=0.83%, FRR=0.44%
+  推荐阈值≈EER: 0.2071 -> FAR=0.54%, FRR=0.54% (gap=0.00)
+Epoch 73: Train Loss=0.0012, Val Loss=0.0022, Val Acc=99.23%
+  正样本距离: 0.0333, 负样本距离: 0.9621
+  阈值=margin/2=0.2500 -> FAR=1.14%, FRR=0.39%
+  推荐阈值≈EER: 0.2012 -> FAR=0.60%, FRR=0.67% (gap=0.08)
+Epoch 74: Train Loss=0.0011, Val Loss=0.0017, Val Acc=99.55%
+  正样本距离: 0.0308, 负样本距离: 0.9744
+  阈值=margin/2=0.2500 -> FAR=0.80%, FRR=0.10%
+  推荐阈值≈EER: 0.1965 -> FAR=0.39%, FRR=0.39% (gap=0.00)
+Epoch 75: Train Loss=0.0010, Val Loss=0.0020, Val Acc=99.33%
+  正样本距离: 0.0320, 负样本距离: 0.9587
+  阈值=margin/2=0.2500 -> FAR=1.04%, FRR=0.31%
+  推荐阈值≈EER: 0.2018 -> FAR=0.57%, FRR=0.49% (gap=0.08)
+Epoch 76: Train Loss=0.0010, Val Loss=0.0016, Val Acc=99.49%
+  正样本距离: 0.0324, 负样本距离: 0.9905
+  阈值=margin/2=0.2500 -> FAR=0.80%, FRR=0.21%
+  推荐阈值≈EER: 0.2047 -> FAR=0.36%, FRR=0.36% (gap=0.00)
+Epoch 77: Train Loss=0.0010, Val Loss=0.0017, Val Acc=99.48%
+  正样本距离: 0.0310, 负样本距离: 0.9909
+  阈值=margin/2=0.2500 -> FAR=0.80%, FRR=0.23%
+  推荐阈值≈EER: 0.2062 -> FAR=0.42%, FRR=0.47% (gap=0.05)
+Epoch 78: Train Loss=0.0009, Val Loss=0.0015, Val Acc=99.60%
+  正样本距离: 0.0308, 负样本距离: 0.9996
+  阈值=margin/2=0.2500 -> FAR=0.54%, FRR=0.26%
+  推荐阈值≈EER: 0.2187 -> FAR=0.26%, FRR=0.26% (gap=0.00)
+✓ 保存最佳模型，验证损失: 0.0015, 准确率: 99.60% -> best_contrastive_resnet18.pth
+Epoch 79: Train Loss=0.0010, Val Loss=0.0016, Val Acc=99.65%
+  正样本距离: 0.0299, 负样本距离: 0.9795
+  阈值=margin/2=0.2500 -> FAR=0.49%, FRR=0.21%
+  推荐阈值≈EER: 0.1990 -> FAR=0.26%, FRR=0.26% (gap=0.00)
+Epoch 80: Train Loss=0.0012, Val Loss=0.0017, Val Acc=99.58%
+  正样本距离: 0.0325, 负样本距离: 0.9911
+  阈值=margin/2=0.2500 -> FAR=0.57%, FRR=0.26%
+  推荐阈值≈EER: 0.2136 -> FAR=0.34%, FRR=0.34% (gap=0.00)
+Epoch 81: Train Loss=0.0010, Val Loss=0.0016, Val Acc=99.57%
+  正样本距离: 0.0303, 负样本距离: 1.0033
+  阈值=margin/2=0.2500 -> FAR=0.62%, FRR=0.23%
+  推荐阈值≈EER: 0.2124 -> FAR=0.39%, FRR=0.44% (gap=0.05)
+Epoch 82: Train Loss=0.0009, Val Loss=0.0019, Val Acc=99.39%
+  正样本距离: 0.0311, 负样本距离: 0.9966
+  阈值=margin/2=0.2500 -> FAR=0.88%, FRR=0.34%
+  推荐阈值≈EER: 0.2055 -> FAR=0.52%, FRR=0.49% (gap=0.03)
+Epoch 83: Train Loss=0.0009, Val Loss=0.0017, Val Acc=99.62%
+  正样本距离: 0.0308, 负样本距离: 0.9848
+  阈值=margin/2=0.2500 -> FAR=0.60%, FRR=0.16%
+  推荐阈值≈EER: 0.2233 -> FAR=0.34%, FRR=0.36% (gap=0.03)
+Epoch 84: Train Loss=0.0008, Val Loss=0.0016, Val Acc=99.52%
+  正样本距离: 0.0315, 负样本距离: 0.9912
+  阈值=margin/2=0.2500 -> FAR=0.73%, FRR=0.23%
+  推荐阈值≈EER: 0.2113 -> FAR=0.44%, FRR=0.36% (gap=0.08)
+Epoch 85: Train Loss=0.0008, Val Loss=0.0016, Val Acc=99.55%
+  正样本距离: 0.0305, 负样本距离: 0.9969
+  阈值=margin/2=0.2500 -> FAR=0.60%, FRR=0.31%
+  推荐阈值≈EER: 0.2133 -> FAR=0.44%, FRR=0.44% (gap=0.00)
+Epoch 86: Train Loss=0.0009, Val Loss=0.0015, Val Acc=99.57%
+  正样本距离: 0.0313, 负样本距离: 0.9996
+  阈值=margin/2=0.2500 -> FAR=0.60%, FRR=0.26%
+  推荐阈值≈EER: 0.2325 -> FAR=0.42%, FRR=0.44% (gap=0.03)
+✓ 保存最佳模型，验证损失: 0.0015, 准确率: 99.57% -> best_contrastive_resnet18.pth
+Epoch 87: Train Loss=0.0009, Val Loss=0.0016, Val Acc=99.69%
+  正样本距离: 0.0315, 负样本距离: 0.9893
+  阈值=margin/2=0.2500 -> FAR=0.52%, FRR=0.10%
+  推荐阈值≈EER: 0.2100 -> FAR=0.34%, FRR=0.39% (gap=0.05)
+Epoch 88: Train Loss=0.0008, Val Loss=0.0017, Val Acc=99.65%
+  正样本距离: 0.0305, 负样本距离: 0.9886
+  阈值=margin/2=0.2500 -> FAR=0.62%, FRR=0.08%
+  推荐阈值≈EER: 0.2081 -> FAR=0.39%, FRR=0.36% (gap=0.03)
+Epoch 89: Train Loss=0.0009, Val Loss=0.0017, Val Acc=99.47%
+  正样本距离: 0.0315, 负样本距离: 0.9974
+  阈值=margin/2=0.2500 -> FAR=0.75%, FRR=0.31%
+  推荐阈值≈EER: 0.2098 -> FAR=0.44%, FRR=0.49% (gap=0.05)
+Epoch 90: Train Loss=0.0010, Val Loss=0.0016, Val Acc=99.66%
+  正样本距离: 0.0314, 负样本距离: 0.9812
+  阈值=margin/2=0.2500 -> FAR=0.54%, FRR=0.13%
+  推荐阈值≈EER: 0.2042 -> FAR=0.29%, FRR=0.26% (gap=0.03)
+Epoch 91: Train Loss=0.0009, Val Loss=0.0018, Val Acc=99.55%
+  正样本距离: 0.0317, 负样本距离: 0.9944
+  阈值=margin/2=0.2500 -> FAR=0.73%, FRR=0.18%
+  推荐阈值≈EER: 0.2028 -> FAR=0.47%, FRR=0.47% (gap=0.00)
+Epoch 92: Train Loss=0.0007, Val Loss=0.0016, Val Acc=99.49%
+  正样本距离: 0.0313, 负样本距离: 0.9973
+  阈值=margin/2=0.2500 -> FAR=0.73%, FRR=0.29%
+  推荐阈值≈EER: 0.2067 -> FAR=0.49%, FRR=0.49% (gap=0.00)
+Epoch 93: Train Loss=0.0007, Val Loss=0.0016, Val Acc=99.58%
+  正样本距离: 0.0322, 负样本距离: 1.0047
+  阈值=margin/2=0.2500 -> FAR=0.52%, FRR=0.31%
+  推荐阈值≈EER: 0.2262 -> FAR=0.42%, FRR=0.42% (gap=0.00)
+Epoch 94: Train Loss=0.0008, Val Loss=0.0016, Val Acc=99.66%
+  正样本距离: 0.0309, 负样本距离: 1.0000
+  阈值=margin/2=0.2500 -> FAR=0.39%, FRR=0.29%
+  推荐阈值≈EER: 0.2250 -> FAR=0.31%, FRR=0.31% (gap=0.00)
+Epoch 95: Train Loss=0.0008, Val Loss=0.0016, Val Acc=99.53%
+  正样本距离: 0.0314, 负样本距离: 0.9910
+  阈值=margin/2=0.2500 -> FAR=0.73%, FRR=0.21%
+  推荐阈值≈EER: 0.2184 -> FAR=0.36%, FRR=0.39% (gap=0.03)
+Epoch 96: Train Loss=0.0009, Val Loss=0.0015, Val Acc=99.62%
+  正样本距离: 0.0315, 负样本距离: 0.9941
+  阈值=margin/2=0.2500 -> FAR=0.47%, FRR=0.29%
+  推荐阈值≈EER: 0.2245 -> FAR=0.31%, FRR=0.34% (gap=0.03)
+✓ 保存最佳模型，验证损失: 0.0015, 准确率: 99.62% -> best_contrastive_resnet18.pth
+Epoch 97: Train Loss=0.0006, Val Loss=0.0016, Val Acc=99.56%
+  正样本距离: 0.0313, 负样本距离: 0.9924
+  阈值=margin/2=0.2500 -> FAR=0.75%, FRR=0.13%
+  推荐阈值≈EER: 0.2059 -> FAR=0.34%, FRR=0.31% (gap=0.03)
+Epoch 98: Train Loss=0.0008, Val Loss=0.0016, Val Acc=99.58%
+  正样本距离: 0.0306, 负样本距离: 0.9946
+  阈值=margin/2=0.2500 -> FAR=0.62%, FRR=0.21%
+  推荐阈值≈EER: 0.2041 -> FAR=0.34%, FRR=0.36% (gap=0.03)
+Epoch 99: Train Loss=0.0009, Val Loss=0.0015, Val Acc=99.62%
+  正样本距离: 0.0309, 负样本距离: 0.9929
+  阈值=margin/2=0.2500 -> FAR=0.57%, FRR=0.18%
+  推荐阈值≈EER: 0.2046 -> FAR=0.36%, FRR=0.34% (gap=0.03)
+Epoch 100: Train Loss=0.0008, Val Loss=0.0016, Val Acc=99.61%
+  正样本距离: 0.0320, 负样本距离: 0.9954
+  阈值=margin/2=0.2500 -> FAR=0.49%, FRR=0.29%
+  推荐阈值≈EER: 0.2149 -> FAR=0.34%, FRR=0.34% (gap=0.00)
+
+训练完成！最佳验证损失: 0.0015, 准确率: 99.62%
