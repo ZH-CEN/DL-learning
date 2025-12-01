@@ -19,6 +19,8 @@ Palm Recognition - 掌纹识别系统
 import argparse
 from datetime import datetime
 from pathlib import Path
+
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
@@ -71,6 +73,8 @@ def parse_args():
                         help='模型权重文件（不填则按 backbone 使用 best_contrastive_<backbone>.pth）')
     parser.add_argument('--threshold', type=float, nargs='+', default=[0.3, 0.4, 0.5, 0.6, 0.7],
                         help='认证阈值（可以指定多个）')
+    parser.add_argument('--plot_roc', action='store_true', help='在评估时输出 ROC 曲线图')
+    parser.add_argument('--roc_path', type=str, default=None, help='ROC 曲线保存路径（png），未指定则保存在 logs/ 下')
     
     # 其他参数
     parser.add_argument('--seed', type=int, default=42,
@@ -227,7 +231,6 @@ def main():
                     else:
                         neg_distances.append(d.item())
 
-        import numpy as np
         pos = np.array(pos_distances)
         neg = np.array(neg_distances)
 
@@ -251,6 +254,37 @@ def main():
         if best_th is not None:
             far_b, frr_b = compute_far_frr(best_th)
             log(f"推荐阈值≈EER: {best_th:.4f} -> FAR={far_b:.2f}%, FRR={frr_b:.2f}% (gap={best_gap:.2f})")
+
+        # 可选：绘制 ROC 曲线
+        if args.plot_roc and pos.size and neg.size:
+            # 全范围扫描
+            all_scores = np.concatenate([pos, neg])
+            scan = np.linspace(all_scores.min(), all_scores.max(), num=400)
+            fpr_list = []
+            tpr_list = []
+            for th in scan:
+                far, frr = compute_far_frr(th)
+                fpr_list.append(far / 100)
+                tpr_list.append(1 - frr / 100)
+            auc = float(np.trapz(tpr_list, fpr_list))
+            try:
+                import matplotlib.pyplot as plt
+
+                roc_path = Path(args.roc_path) if args.roc_path else Path("logs") / f"roc_{datetime.now():%Y%m%d_%H%M%S}.png"
+                roc_path.parent.mkdir(parents=True, exist_ok=True)
+                plt.figure()
+                plt.plot(fpr_list, tpr_list, label=f"AUC={auc:.4f}")
+                plt.plot([0, 1], [0, 1], "k--", alpha=0.3)
+                plt.xlabel("False Positive Rate")
+                plt.ylabel("True Positive Rate")
+                plt.title("ROC Curve (pair evaluation)")
+                plt.legend()
+                plt.grid(True, alpha=0.3)
+                plt.savefig(roc_path, dpi=200, bbox_inches="tight")
+                plt.close()
+                log(f"✓ ROC 曲线已保存: {roc_path} (AUC={auc:.4f})")
+            except Exception as e:
+                log(f"✗ 绘制 ROC 失败: {e}")
 
         # 按传入阈值输出
         log("\n" + "="*60)
