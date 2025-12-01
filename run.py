@@ -1,0 +1,166 @@
+"""
+Palm Recognition - 掌纹识别系统
+主程序入口
+
+用法示例：
+    # 训练分类模型
+    python run.py --mode train_classifier --epochs 30
+    
+    # 训练对比学习模型
+    python run.py --mode train_contrastive --epochs 30 --margin 0.5
+    
+    # 评估认证性能
+    python run.py --mode evaluate --model best_contrastive_model.pth --threshold 0.5
+    
+    # 完整流程（训练+评估）
+    python run.py --mode all
+"""
+
+import argparse
+import torch
+from torch.utils.data import DataLoader
+
+from palm.config import load_config, get_transform, set_seed
+from palm.datasets import AuthDataset
+from palm.models import INet
+from palm.train import train_classifier, train_contrastive
+from palm.evaluate import evaluate_authentication
+
+
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description='掌纹识别系统')
+    
+    # 运行模式
+    parser.add_argument('--mode', type=str, default='all',
+                        choices=['train_classifier', 'train_contrastive', 'evaluate', 'all'],
+                        help='运行模式')
+    
+    # 数据参数
+    parser.add_argument('--data_root', type=str, default='PalmBigDataBase',
+                        help='数据集根目录')
+    parser.add_argument('--num_workers', type=int, default=0,
+                        help='数据加载线程数')
+    
+    # 训练参数
+    parser.add_argument('--epochs', type=int, default=30,
+                        help='训练轮数')
+    parser.add_argument('--lr', type=float, default=0.001,
+                        help='学习率')
+    parser.add_argument('--feature_dim', type=int, default=128,
+                        help='特征维度')
+    parser.add_argument('--margin', type=float, default=0.5,
+                        help='对比损失的margin')
+    
+    # 评估参数
+    parser.add_argument('--model', type=str, default='best_contrastive_model.pth',
+                        help='模型权重文件')
+    parser.add_argument('--threshold', type=float, nargs='+', default=[0.3, 0.4, 0.5, 0.6, 0.7],
+                        help='认证阈值（可以指定多个）')
+    
+    # 其他参数
+    parser.add_argument('--seed', type=int, default=42,
+                        help='随机种子')
+    parser.add_argument('--cache', action='store_true',
+                        help='是否缓存数据到内存')
+    
+    return parser.parse_args()
+
+
+def main():
+    """主函数"""
+    args = parse_args()
+    
+    # 加载配置
+    cfg = load_config()
+    set_seed(args.seed)
+    
+    print("="*60)
+    print("掌纹识别系统")
+    print("="*60)
+    print(f"运行模式: {args.mode}")
+    print(f"数据路径: {args.data_root}")
+    print(f"设备: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
+    print("="*60)
+    
+    # 根据模式执行不同操作
+    if args.mode == 'train_classifier' or args.mode == 'all':
+        print("\n[1/3] 训练分类模型...")
+        result = train_classifier(
+            cfg=cfg,
+            data_root=args.data_root,
+            epochs=args.epochs,
+            lr=args.lr,
+            cache=args.cache,
+            num_workers=args.num_workers,
+            save_path='best_classifier.pth'
+        )
+        print(f"✓ 分类模型训练完成 - 最佳准确率: {result['best_metric']*100:.2f}%\n")
+    
+    if args.mode == 'train_contrastive' or args.mode == 'all':
+        print("\n[2/3] 训练对比学习模型...")
+        result = train_contrastive(
+            cfg=cfg,
+            data_root=args.data_root,
+            epochs=args.epochs,
+            lr=args.lr,
+            margin=args.margin,
+            feature_dim=args.feature_dim,
+            num_workers=args.num_workers,
+            save_path='best_contrastive_model.pth'
+        )
+        print(f"✓ 对比学习模型训练完成 - 最佳损失: {result['best_metric']:.4f}\n")
+        
+        # 如果是all模式，更新模型路径
+        if args.mode == 'all':
+            args.model = result['best_path']
+    
+    if args.mode == 'evaluate' or args.mode == 'all':
+        print("\n[3/3] 评估认证性能...")
+        
+        # 加载模型
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = INet(feature_dim=args.feature_dim).to(device)
+        
+        try:
+            state_dict = torch.load(args.model, map_location=device)
+            model.load_state_dict(state_dict)
+            print(f"✓ 成功加载模型: {args.model}")
+        except FileNotFoundError:
+            print(f"✗ 找不到模型文件: {args.model}")
+            return
+        
+        # 准备数据
+        transform = get_transform(cfg)
+        gallery_set = AuthDataset(args.data_root, mode='train', transform=transform)
+        query_set = AuthDataset(args.data_root, mode='test', transform=transform)
+        
+        gallery_loader = DataLoader(gallery_set, batch_size=cfg['train']['batch_size'], 
+                                    shuffle=False, num_workers=args.num_workers)
+        query_loader = DataLoader(query_set, batch_size=cfg['test']['batch_size'], 
+                                  shuffle=False, num_workers=args.num_workers)
+        
+        # 多个阈值评估
+        thresholds = args.threshold if isinstance(args.threshold, list) else [args.threshold]
+        
+        results = []
+        for threshold in thresholds:
+            result = evaluate_authentication(model, gallery_loader, query_loader, threshold=threshold)
+            results.append((threshold, result))
+        
+        # 输出总结
+        print("\n" + "="*60)
+        print("评估结果总结:")
+        print("="*60)
+        print(f"{'阈值':<10} {'FAR (%)':<10} {'FRR (%)':<10} {'平均真实距离':<15} {'平均冒充距离':<15}")
+        print("-"*60)
+        for threshold, result in results:
+            print(f"{threshold:<10.2f} {result['FAR']:<10.2f} {result['FRR']:<10.2f} "
+                  f"{result['genuine_mean']:<15.4f} {result['impostor_mean']:<15.4f}")
+        print("="*60)
+    
+    print("\n✓ 所有任务完成！")
+
+
+if __name__ == '__main__':
+    main()
