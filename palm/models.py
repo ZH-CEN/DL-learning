@@ -156,11 +156,13 @@ class ResNetBackbone(nn.Module):
             net.conv1, net.bn1, net.relu, net.maxpool, net.layer1, net.layer2, net.layer3, net.layer4
         )
         in_features = net.fc.in_features
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.normalize = normalize
         self.projection = nn.Linear(in_features, feature_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.stem(x)
+        x = self.pool(x)
         x = torch.flatten(x, 1)
         x = self.projection(x)
         if self.normalize:
