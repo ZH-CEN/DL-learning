@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
-from .models import INet, PalmClassifier
+from .models import INet, PalmClassifier, ResNetBackbone, ResNetClassifier
 from .mobileone import MobileOne, MobileOneClassifier
 from .datasets import PalmDataset, AuthDataset, ContrastivePairDataset, TripletDataset
 from .losses import ContrastiveLoss, TripletLoss, MarginLoss, FocalLoss, MSELoss
@@ -37,20 +37,19 @@ def train_classifier(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = get_transform(cfg)
 
-    # 按身份划分：F/S 都用于训练与验证，按比例切分，避免手型被硬编码为集合区分
+    # 按“手型+人”划分，同一只手的样本按比例切分 train/val
     all_samples = sorted(Path(data_root).glob("*.bmp"))
-    id_groups: dict[str, dict[str, list[Path]]] = {}
+    id_groups: dict[str, list[Path]] = {}
     for path in all_samples:
-        pid = PalmDataset._get_identity(path.name)
-        hand = path.name.split("_")[1]
-        id_groups.setdefault(pid, {"F": [], "S": []})
-        id_groups[pid][hand].append(path)
+        pid = PalmDataset._get_identity(path.name)  # e.g., F_100 / S_100
+        id_groups.setdefault(pid, [])
+        id_groups[pid].append(path)
 
     train_paths: list[Path] = []
     val_paths: list[Path] = []
     split_ratio = 0.8
-    for hands in id_groups.values():
-        paths = sorted(hands.get("F", []) + hands.get("S", []))
+    for paths in id_groups.values():
+        paths = sorted(paths)
         if not paths:
             continue
         cutoff = max(1, int(len(paths) * split_ratio))
@@ -77,6 +76,10 @@ def train_classifier(
     backbone = backbone.lower()
     if backbone == "mobileone":
         model = MobileOneClassifier(num_classes=num_classes, feature_dim=feature_dim, normalize_features=True).to(device)
+    elif backbone in {"resnet18", "resnet34"}:
+        model = ResNetClassifier(
+            num_classes=num_classes, feature_dim=feature_dim, name=backbone, normalize_features=True
+        ).to(device)
     else:
         model = PalmClassifier(num_classes=num_classes, feature_dim=feature_dim, normalize_features=True).to(device)
 
@@ -243,6 +246,8 @@ def train_contrastive(
     backbone = backbone.lower()
     if backbone == "mobileone":
         model = MobileOne(feature_dim=feature_dim, normalize=False).to(device)
+    elif backbone in {"resnet18", "resnet34"}:
+        model = ResNetBackbone(name=backbone, feature_dim=feature_dim, normalize=False).to(device)
     else:
         model = INet(feature_dim=feature_dim).to(device)
     if loss_type == "contrastive":
@@ -339,7 +344,7 @@ def train_contrastive(
                         else:
                             neg_distances.append(dist.item())
 
-                    threshold = 0.5
+                    threshold = margin / 2
                     predictions = (cosine_distance < threshold).float()
                     correct += (predictions == labels).sum().item()
                     total += labels.size(0)

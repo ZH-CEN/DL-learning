@@ -60,12 +60,13 @@ class PalmDataset(Dataset):
     @staticmethod
     def _get_identity(filename):
         """
-        从文件名提取身份ID（忽略 F/S 光照标记，按 person_id 聚合）
-        例：P_F_100_1.bmp / P_S_100_1.bmp → "100"
+        从文件名提取身份ID，区分左右手
+        例：P_F_100_1.bmp / P_S_100_1.bmp → "F_100"/"S_100"
         """
         parts = filename.split("_")
+        hand = parts[1]
         person_id = parts[2]
-        return person_id
+        return f"{hand}_{person_id}"
 
     def __len__(self):
         return len(self.samples)
@@ -133,6 +134,10 @@ class AuthDataset(Dataset):
             paths = sorted(paths)
             if not paths:
                 return [], []
+            if len(paths) >= 10:
+                return paths[:5], paths[5:10]
+            if len(paths) >= 10:
+                return paths[:5], paths[5:10]
             cutoff = max(1, int(len(paths) * split_ratio))
             if cutoff >= len(paths) and len(paths) > 1:
                 cutoff = len(paths) - 1
@@ -155,10 +160,11 @@ class AuthDataset(Dataset):
 
     @staticmethod
     def _get_identity(filename):
-        """从文件名提取身份ID（忽略 F/S 光照标记）"""
+        """从文件名提取身份ID（区分 F/S 模态）"""
         parts = filename.split("_")
+        hand = parts[1]
         person_id = parts[2]
-        return person_id
+        return f"{hand}_{person_id}"
 
     @staticmethod
     def _get_hand(filename):
@@ -216,6 +222,8 @@ class ContrastivePairDataset(Dataset):
             paths = sorted(paths)
             if not paths:
                 return [], []
+            if len(paths) >= 10:
+                return paths[:5], paths[5:10]
             cutoff = max(1, int(len(paths) * split_ratio))
             if cutoff >= len(paths) and len(paths) > 1:
                 cutoff = len(paths) - 1
@@ -240,10 +248,11 @@ class ContrastivePairDataset(Dataset):
 
     @staticmethod
     def _get_identity(filename):
-        """从文件名提取身份ID（忽略 F/S 光照标记）"""
+        """从文件名提取身份ID（区分 F/S 光照/手型）"""
         parts = filename.split("_")
+        hand = parts[1]
         person_id = parts[2]
-        return person_id
+        return f"{hand}_{person_id}"
 
     @staticmethod
     def _get_hand(filename):
@@ -343,8 +352,9 @@ class TripletDataset(Dataset):
     @staticmethod
     def _get_identity(filename):
         parts = filename.split("_")
+        hand = parts[1]
         person_id = parts[2]
-        return person_id
+        return f"{hand}_{person_id}"
 
     @staticmethod
     def _get_hand(filename):

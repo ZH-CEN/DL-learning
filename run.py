@@ -51,7 +51,7 @@ def parse_args():
                         help='学习率')
     parser.add_argument('--cls_loss', type=str, default='ce', choices=['ce', 'focal', 'mse'],
                         help='分类损失类型')
-    parser.add_argument('--backbone', type=str, default='inet', choices=['inet', 'mobileone'],
+    parser.add_argument('--backbone', type=str, default='inet', choices=['inet', 'mobileone', 'resnet18', 'resnet34'],
                         help='特征提取骨干')
     parser.add_argument('--feature_dim', type=int, default=128,
                         help='特征维度')
@@ -160,6 +160,10 @@ def main():
                 from palm.mobileone import MobileOne
 
                 model = MobileOne(feature_dim=saved_feature_dim, normalize=False).to(device)
+            elif saved_backbone in {"resnet18", "resnet34"}:
+                from palm.models import ResNetBackbone
+
+                model = ResNetBackbone(name=saved_backbone, feature_dim=saved_feature_dim, normalize=False).to(device)
             else:
                 model = INet(feature_dim=saved_feature_dim).to(device)
             model.load_state_dict(checkpoint["model"])

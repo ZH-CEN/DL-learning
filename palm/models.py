@@ -8,6 +8,7 @@ from typing import Iterable, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision import models
 
 
 class ConvBlock(nn.Module):
@@ -132,3 +133,55 @@ class VGG(nn.Module):
         x = torch.flatten(x, 1)
         x = self.classifier(x)
         return x
+
+
+class ResNetBackbone(nn.Module):
+    """
+    ResNet 特征提取（resnet18/34），首层改成单通道，fc 替换为投影。
+    """
+
+    def __init__(self, name: str = "resnet18", feature_dim: int = 128, normalize: bool = False):
+        super().__init__()
+        name = name.lower()
+        if name == "resnet34":
+            net = models.resnet34(weights=None)
+        else:
+            net = models.resnet18(weights=None)
+
+        # 改成灰度输入
+        net.conv1 = nn.Conv2d(1, net.conv1.out_channels, kernel_size=7, stride=2, padding=3, bias=False)
+
+        # 去掉原 fc，保留特征抽取部分
+        self.stem = nn.Sequential(
+            net.conv1, net.bn1, net.relu, net.maxpool, net.layer1, net.layer2, net.layer3, net.layer4
+        )
+        in_features = net.fc.in_features
+        self.normalize = normalize
+        self.projection = nn.Linear(in_features, feature_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.stem(x)
+        x = torch.flatten(x, 1)
+        x = self.projection(x)
+        if self.normalize:
+            x = F.normalize(x, p=2, dim=1)
+        return x
+
+
+class ResNetClassifier(nn.Module):
+    """
+    ResNet 分类头：ResNetBackbone + 线性分类器。
+    """
+
+    def __init__(self, num_classes: int, feature_dim: int = 128, name: str = "resnet18", normalize_features: bool = True):
+        super().__init__()
+        self.normalize_features = normalize_features
+        self.backbone = ResNetBackbone(name=name, feature_dim=feature_dim, normalize=normalize_features)
+        self.classifier = nn.Linear(feature_dim, num_classes)
+
+    def forward(self, x: torch.Tensor, return_features: bool = False):
+        feats = self.backbone(x)
+        logits = self.classifier(feats)
+        if return_features:
+            return logits, feats
+        return logits
