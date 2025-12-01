@@ -96,6 +96,8 @@ python run.py --mode evaluate --model best_contrastive_model.pth --threshold 0.5
 python run.py --mode evaluate --threshold 0.3 0.4 0.5 0.6 0.7
 ```
 
+> MobileOne 训练/测试：在上述命令加 `--backbone mobileone`（分类/对比均可）；评估会自动读取 checkpoint 中记录的骨干类型加载 MobileOne 或 INet，无需额外参数。
+
 > 度量学习训练时会自动读取 `config/<loss>.yml`（如 `config/contrastive.yml`、`config/triplet.yml`、`config/margin.yml`），其中可配置 `learning_rate`、`epochs`、`batch_size`、`feature_dim`、`margin`、`weight_decay`、`lr_step_size`、`lr_gamma` 等超参数。未提供对应文件时使用代码内默认值。
 >
 > 分类训练支持 `--cls_loss ce|focal|mse`，会自动读取 `config/focal.yml` 或 `config/mse.yml` 中的超参（如 `focal_alpha`、`focal_gamma`、`learning_rate`、`epochs`）。未提供配置文件则使用代码默认值。
@@ -171,7 +173,7 @@ img_basic_info:
 ### Q1: 内存不足
 ```bash
 # 减小批次大小
-python run.py --mode all --epochs 30
+python run.py --mode all --epochs 30 --no_cache
 # 编辑 args.yml，将 batch_size 从 512 改为 128 或更小
 ```
 

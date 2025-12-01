@@ -21,7 +21,7 @@ def train_classifier(
     data_root,
     epochs=50,
     lr=0.001,
-    cache=False,
+    cache=True,
     num_workers=0,
     save_path="best_classifier.pth",
     loss_type: str = "ce",
@@ -55,10 +55,18 @@ def train_classifier(
     # 加载损失相关配置（config/<loss_type>.yml）
     loss_type = loss_type.lower()
     loss_cfg = load_loss_config(loss_type, loss_config_dir)
-    focal_alpha = loss_cfg.get("focal_alpha", focal_alpha)
-    focal_gamma = loss_cfg.get("focal_gamma", focal_gamma)
-    lr = loss_cfg.get("learning_rate", lr)
-    epochs = loss_cfg.get("epochs", epochs)
+    default_epochs = 50
+    default_lr = 0.001
+    default_focal_alpha = 0.25
+    default_focal_gamma = 2.0
+
+    focal_alpha = loss_cfg.get("focal_alpha", focal_alpha if focal_alpha != default_focal_alpha else default_focal_alpha)
+    focal_gamma = loss_cfg.get("focal_gamma", focal_gamma if focal_gamma != default_focal_gamma else default_focal_gamma)
+
+    if epochs == default_epochs:
+        epochs = loss_cfg.get("epochs", epochs)
+    if lr == default_lr:
+        lr = loss_cfg.get("learning_rate", lr)
 
     if loss_type == "focal":
         criterion = FocalLoss(gamma=focal_gamma, alpha=focal_alpha)
@@ -136,6 +144,7 @@ def train_contrastive(
     lr=0.001,
     margin=0.5,
     feature_dim=128,
+    cache=True,
     num_workers=0,
     save_path="best_contrastive_model.pth",
     loss_type: str = "contrastive",
@@ -148,23 +157,37 @@ def train_contrastive(
     loss_type = loss_type.lower()
     is_pair_loss = loss_type == "contrastive"
 
-    # 覆盖超参：优先使用 config/<loss_type>.yml
+    # 覆盖超参：config/<loss_type>.yml 仅在使用默认值时才覆盖，命令行显式传入优先
     loss_cfg = load_loss_config(loss_type, loss_config_dir)
-    margin = loss_cfg.get("margin", margin)
-    feature_dim = loss_cfg.get("feature_dim", feature_dim)
-    epochs = loss_cfg.get("epochs", epochs)
-    lr = loss_cfg.get("learning_rate", lr)
-    batch_size = loss_cfg.get("batch_size", 32)
-    weight_decay = loss_cfg.get("weight_decay", 1e-4)
-    lr_step_size = loss_cfg.get("lr_step_size", 15)
-    lr_gamma = loss_cfg.get("lr_gamma", 0.5)
+    default_epochs = 50
+    default_lr = 0.001
+    default_margin = 0.5
+    default_feature_dim = 128
+    default_batch_size = 32
+    default_weight_decay = 1e-4
+    default_lr_step = 15
+    default_lr_gamma = 0.5
+
+    if margin == default_margin:
+        margin = loss_cfg.get("margin", margin)
+    if feature_dim == default_feature_dim:
+        feature_dim = loss_cfg.get("feature_dim", feature_dim)
+    if epochs == default_epochs:
+        epochs = loss_cfg.get("epochs", epochs)
+    if lr == default_lr:
+        lr = loss_cfg.get("learning_rate", lr)
+
+    batch_size = loss_cfg.get("batch_size", default_batch_size)
+    weight_decay = loss_cfg.get("weight_decay", default_weight_decay)
+    lr_step_size = loss_cfg.get("lr_step_size", default_lr_step)
+    lr_gamma = loss_cfg.get("lr_gamma", default_lr_gamma)
 
     if is_pair_loss:
-        train_set = ContrastivePairDataset(data_root, mode="train", transform=transform)
-        test_set = ContrastivePairDataset(data_root, mode="test", transform=transform)
+        train_set = ContrastivePairDataset(data_root, mode="train", transform=transform, cache=cache)
+        test_set = ContrastivePairDataset(data_root, mode="test", transform=transform, cache=cache)
     else:
-        train_set = TripletDataset(data_root, mode="train", transform=transform)
-        test_set = TripletDataset(data_root, mode="test", transform=transform)
+        train_set = TripletDataset(data_root, mode="train", transform=transform, cache=cache)
+        test_set = TripletDataset(data_root, mode="test", transform=transform, cache=cache)
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)

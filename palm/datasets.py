@@ -83,20 +83,23 @@ class PalmDataset(Dataset):
 class AuthDataset(Dataset):
     """
     认证数据集
-    每个身份取5张训练，5张测试
+    每个身份取5张训练，5张测试，可选缓存。
     """
-    
-    def __init__(self, root, mode='train', transform=None):
+
+    def __init__(self, root, mode='train', transform=None, cache: bool = True):
         """
         Args:
             root: 数据集根目录
             mode: 'train' 或 'test'
             transform: 图像转换
+            cache: 是否将图像缓存到内存
         """
         self.root = Path(root)
         self.mode = mode
         self.transform = transform
-        
+        self.cache = cache
+        self._cache_data = {}
+
         # 按身份ID分组样本（区分左右手）
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
@@ -105,7 +108,7 @@ class AuthDataset(Dataset):
             if pid not in id_groups:
                 id_groups[pid] = []
             id_groups[pid].append(path)
-        
+
         # 每个ID取5张训练，5张测试
         self.samples = []
         for pid, paths in id_groups.items():
@@ -113,11 +116,17 @@ class AuthDataset(Dataset):
                 self.samples.extend(paths[:5])
             else:  # test
                 self.samples.extend(paths[5:10])
-        
+
         self.samples = sorted(self.samples)
         ids = sorted({self._get_identity(p.name) for p in self.samples})
         self.id2idx = {pid: idx for idx, pid in enumerate(ids)}
-    
+
+        if self.cache:
+            for idx, path in enumerate(self.samples):
+                with Image.open(path) as img:
+                    img = img.convert("L")
+                    self._cache_data[idx] = img.copy()
+
     @staticmethod
     def _get_identity(filename):
         """从文件名提取身份ID"""
@@ -125,38 +134,44 @@ class AuthDataset(Dataset):
         hand = parts[1]  # F 或 S
         person_id = parts[2]
         return f"{hand}_{person_id}"
-    
+
     def __len__(self):
         return len(self.samples)
-    
+
     def __getitem__(self, index):
-        path = self.samples[index]
-        img = Image.open(path).convert("L")
-        label = self.id2idx[self._get_identity(path.name)]
-        
+        if self.cache and index in self._cache_data:
+            img = self._cache_data[index]
+        else:
+            path = self.samples[index]
+            img = Image.open(path).convert("L")
+        label = self.id2idx[self._get_identity(self.samples[index].name)]
+
         if self.transform:
             img = self.transform(img)
-        
+
         return img, label
 
 
 class ContrastivePairDataset(Dataset):
     """
     对比学习数据集
-    返回样本对（正样本对/负样本对）
+    返回样本对（正样本对/负样本对），可选缓存。
     """
-    
-    def __init__(self, root, mode='train', transform=None):
+
+    def __init__(self, root, mode='train', transform=None, cache: bool = True):
         """
         Args:
             root: 数据集根目录
             mode: 'train' 或 'test'
             transform: 图像转换
+            cache: 是否缓存图像
         """
         self.root = Path(root)
         self.mode = mode
         self.transform = transform
-        
+        self.cache = cache
+        self._cache_data = {}
+
         # 按身份ID分组样本（区分左右手）
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
@@ -165,7 +180,7 @@ class ContrastivePairDataset(Dataset):
             if pid not in id_groups:
                 id_groups[pid] = []
             id_groups[pid].append(path)
-        
+
         # 每个ID取5张训练，5张测试
         self.id_groups = {}
         for pid, paths in id_groups.items():
@@ -173,13 +188,20 @@ class ContrastivePairDataset(Dataset):
                 selected = paths[:5]
             else:  # test
                 selected = paths[5:10]
-            
+
             # 只保留有样本的身份
             if len(selected) > 0:
                 self.id_groups[pid] = selected
-        
+
         self.ids = list(self.id_groups.keys())
-    
+
+        if self.cache:
+            for pid, paths in self.id_groups.items():
+                for path in paths:
+                    with Image.open(path) as img:
+                        img = img.convert("L")
+                        self._cache_data[path] = img.copy()
+
     @staticmethod
     def _get_identity(filename):
         """从文件名提取身份ID"""
@@ -187,10 +209,16 @@ class ContrastivePairDataset(Dataset):
         hand = parts[1]  # F 或 S
         person_id = parts[2]
         return f"{hand}_{person_id}"
-    
+
     def __len__(self):
         return len(self.ids) * 10  # 每个ID生成10对样本
-    
+
+    def _read(self, path: Path):
+        if self.cache and path in self._cache_data:
+            return self._cache_data[path]
+        with Image.open(path) as img:
+            return img.convert("L")
+
     def __getitem__(self, index):
         # 50%正样本对，50%负样本对
         if index % 2 == 0:
@@ -206,17 +234,17 @@ class ContrastivePairDataset(Dataset):
             # 负样本对（不同的人或不同的手）
             idx1 = (index // 10) % len(self.ids)
             idx2 = (idx1 + 1 + random.randint(0, len(self.ids) - 2)) % len(self.ids)
-            
+
             pid1 = self.ids[idx1]
             pid2 = self.ids[idx2]
-            
+
             path1 = random.choice(self.id_groups[pid1])
             path2 = random.choice(self.id_groups[pid2])
             label = 0.0
-        
-        img1 = Image.open(path1).convert("L")
-        img2 = Image.open(path2).convert("L")
-        
+
+        img1 = self._read(path1)
+        img2 = self._read(path2)
+
         if self.transform:
             img1 = self.transform(img1)
             img2 = self.transform(img2)
@@ -227,14 +255,16 @@ class ContrastivePairDataset(Dataset):
 class TripletDataset(Dataset):
     """
     三元组数据集
-    返回 (anchor, positive, negative)
+    返回 (anchor, positive, negative)，可选缓存。
     """
 
-    def __init__(self, root, mode="train", transform=None):
+    def __init__(self, root, mode="train", transform=None, cache: bool = True):
         assert mode in {"train", "test"}
         self.root = Path(root)
         self.mode = mode
         self.transform = transform
+        self.cache = cache
+        self._cache_data = {}
 
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
@@ -249,6 +279,13 @@ class TripletDataset(Dataset):
                 self.id_groups[pid] = selected
         self.ids = list(self.id_groups.keys())
 
+        if self.cache:
+            for pid, paths in self.id_groups.items():
+                for path in paths:
+                    with Image.open(path) as img:
+                        img = img.convert("L")
+                        self._cache_data[path] = img.copy()
+
     @staticmethod
     def _get_identity(filename):
         parts = filename.split("_")
@@ -258,6 +295,12 @@ class TripletDataset(Dataset):
 
     def __len__(self):
         return max(1, len(self.ids) * 10)
+
+    def _read(self, path: Path):
+        if self.cache and path in self._cache_data:
+            return self._cache_data[path]
+        with Image.open(path) as img:
+            return img.convert("L")
 
     def __getitem__(self, index):
         # 选择一个身份作为 anchor/positive
@@ -269,9 +312,9 @@ class TripletDataset(Dataset):
         neg_pid = self.ids[(index + 1) % len(self.ids)]
         neg_path = random.choice(self.id_groups[neg_pid])
 
-        anchor = Image.open(anchor_path).convert("L")
-        positive = Image.open(pos_path).convert("L")
-        negative = Image.open(neg_path).convert("L")
+        anchor = self._read(anchor_path)
+        positive = self._read(pos_path)
+        negative = self._read(neg_path)
 
         if self.transform:
             anchor = self.transform(anchor)

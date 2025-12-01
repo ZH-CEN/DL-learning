@@ -65,8 +65,10 @@ def parse_args():
     # 其他参数
     parser.add_argument('--seed', type=int, default=42,
                         help='随机种子')
-    parser.add_argument('--cache', action='store_true',
-                        help='是否缓存数据到内存')
+    parser.add_argument('--cache', action='store_true', default=True,
+                        help='是否缓存数据到内存（默认缓存）')
+    parser.add_argument('--no_cache', action='store_false', dest='cache',
+                        help='不缓存数据到内存')
     
     return parser.parse_args()
 
@@ -152,8 +154,8 @@ def main():
         
         # 准备数据
         transform = get_transform(cfg)
-        gallery_set = AuthDataset(args.data_root, mode='train', transform=transform)
-        query_set = AuthDataset(args.data_root, mode='test', transform=transform)
+        gallery_set = AuthDataset(args.data_root, mode='train', transform=transform, cache=args.cache)
+        query_set = AuthDataset(args.data_root, mode='test', transform=transform, cache=args.cache)
         
         gallery_loader = DataLoader(gallery_set, batch_size=cfg['train']['batch_size'], 
                                     shuffle=False, num_workers=args.num_workers)
