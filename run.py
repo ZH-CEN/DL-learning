@@ -71,8 +71,8 @@ def parse_args():
     # 评估参数
     parser.add_argument('--model', type=str, default=None,
                         help='模型权重文件（不填则按 backbone 使用 best_contrastive_<backbone>.pth）')
-    parser.add_argument('--threshold', type=float, nargs='+', default=[0.3, 0.4, 0.5, 0.6, 0.7],
-                        help='认证阈值（可以指定多个）')
+    parser.add_argument('--threshold', type=float, nargs='+', default=None,
+                        help='认证阈值（留空则使用自动推荐阈值）')
     parser.add_argument('--plot_roc', action='store_true', help='在评估时输出 ROC 曲线图')
     parser.add_argument('--roc_path', type=str, default=None, help='ROC 曲线保存路径（png），未指定则保存在 logs/ 下')
     
@@ -212,7 +212,7 @@ def main():
             test_set, batch_size=cfg['test']['batch_size'], shuffle=False, num_workers=args.num_workers
         )
         
-        thresholds = args.threshold if isinstance(args.threshold, list) else [args.threshold]
+        user_thresholds = args.threshold if args.threshold is not None else []
         pos_distances = []
         neg_distances = []
 
@@ -286,7 +286,10 @@ def main():
             except Exception as e:
                 log(f"✗ 绘制 ROC 失败: {e}")
 
-        # 按传入阈值输出
+        # 阈值列表：用户未指定则只用推荐阈值
+        thresholds = user_thresholds if user_thresholds else ([best_th] if best_th is not None else [])
+
+        # 按阈值输出
         log("\n" + "="*60)
         log("评估结果总结:")
         log("="*60)
@@ -295,7 +298,7 @@ def main():
         for th in thresholds:
             far, frr = compute_far_frr(th)
             log(f"{th:<10.4f} {far:<10.2f} {frr:<10.2f} {pos.mean():<15.4f} {neg.mean():<15.4f}")
-        if best_th is not None:
+        if best_th is not None and not user_thresholds:
             log("-"*60)
             log(f"推荐阈值≈EER: {best_th:.4f} (gap={best_gap:.2f})")
         log("="*60)
