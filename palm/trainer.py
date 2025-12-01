@@ -15,7 +15,7 @@ from tqdm import tqdm
 from .models import INet, PalmClassifier, ResNetBackbone, ResNetClassifier
 from .mobileone import MobileOne, MobileOneClassifier
 from .datasets import PalmDataset, AuthDataset, ContrastivePairDataset, TripletDataset
-from .losses import ContrastiveLoss, TripletLoss, MarginLoss, FocalLoss, MSELoss
+from .losses import ContrastiveLoss, TripletLoss, MarginLoss, FocalLoss, MSELoss, ArcFaceLoss
 from .config import get_transform, load_loss_config
 
 
@@ -383,6 +383,188 @@ def train_contrastive(
                     "margin": margin,
                     "loss_type": loss_type,
                     "backbone": backbone,
+                },
+                save_path,
+            )
+            log(f"✓ 保存最佳模型，验证损失: {best_loss:.4f}, 准确率: {val_acc:.2f}% -> {save_path}")
+
+    log(f"\n训练完成！最佳验证损失: {best_loss:.4f}, 准确率: {best_acc:.2f}%")
+    log_f.close()
+    return {"best_metric": best_loss, "best_path": save_path, "best_acc": best_acc / 100, "log_file": str(log_file)}
+
+
+def train_arcface_contrastive(
+    cfg,
+    data_root,
+    epochs=50,
+    lr=0.001,
+    margin=0.5,
+    feature_dim=128,
+    cache=True,
+    num_workers=0,
+    save_path="best_arcface_contrastive.pth",
+    backbone: str = "resnet18",
+    batch_size: int | None = None,
+    arcface_margin: float = 0.5,
+    arcface_scale: float = 64.0,
+    contrastive_weight: float = 1.0,
+    log_file: str | None = None,
+):
+    """
+    混合训练：ArcFace 分类 + 对比损失度量，使用共享特征（默认 ResNet18）。
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    transform = get_transform(cfg)
+
+    # 覆盖超参
+    default_epochs = 50
+    default_lr = 0.001
+    default_margin = 0.5
+    default_feature_dim = 128
+    default_batch_size = 32
+    default_weight_decay = 1e-4
+    default_lr_step = 15
+    default_lr_gamma = 0.5
+
+    if epochs == default_epochs:
+        epochs = cfg.get("train", {}).get("epochs", epochs)
+    if lr == default_lr:
+        lr = cfg.get("train", {}).get("learning_rate", lr)
+    if margin == default_margin:
+        margin = margin
+    if feature_dim == default_feature_dim:
+        feature_dim = feature_dim
+    if batch_size is None:
+        batch_size = default_batch_size
+    weight_decay = cfg["train"].get("weight_decay", default_weight_decay)
+    lr_step_size = cfg["train"].get("lr_step_size", default_lr_step)
+    lr_gamma = cfg["train"].get("lr_gamma", default_lr_gamma)
+
+    # 数据集：返回身份标签用于 ArcFace，同批次用于对比损失
+    train_set = ContrastivePairDataset(data_root, mode="train", transform=transform, cache=cache, return_ids=True)
+    test_set = ContrastivePairDataset(data_root, mode="test", transform=transform, cache=cache, return_ids=True)
+
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    num_classes = len(train_set.id2idx)
+
+    backbone = backbone.lower()
+    if backbone == "mobileone":
+        model = MobileOne(feature_dim=feature_dim, normalize=False).to(device)
+    elif backbone in {"resnet18", "resnet34"}:
+        model = ResNetBackbone(name=backbone, feature_dim=feature_dim, normalize=False).to(device)
+    else:
+        model = INet(feature_dim=feature_dim).to(device)
+
+    arcface_loss = ArcFaceLoss(num_classes=num_classes, feature_dim=feature_dim, margin=arcface_margin, scale=arcface_scale).to(device)
+    contrastive_loss = ContrastiveLoss(margin=margin)
+
+    optimizer = torch.optim.Adam(
+        list(model.parameters()) + list(arcface_loss.parameters()), lr=lr, weight_decay=weight_decay
+    )
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=lr_gamma)
+
+    best_loss = float("inf")
+    best_acc = 0.0
+
+    log_file = log_file or Path("logs") / f"train_arcface_contrastive_{datetime.now():%Y%m%d_%H%M%S}.log"
+    Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+    log_f = open(log_file, "a", encoding="utf-8")
+
+    def log(msg: str):
+        print(msg)
+        log_f.write(msg + "\n")
+        log_f.flush()
+
+    log(
+        f"开始混合训练 - arcface_margin={arcface_margin}, arcface_scale={arcface_scale}, "
+        f"contrastive_margin={margin}, lambda={contrastive_weight}, feature_dim={feature_dim}, "
+        f"batch_size={batch_size}, backbone={backbone}"
+    )
+
+    for epoch in range(epochs):
+        model.train()
+        arcface_loss.train()
+        running_loss = 0.0
+
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}"):
+            img1, img2, pair_labels, cls1, cls2 = batch
+            img1, img2 = img1.to(device), img2.to(device)
+            pair_labels = pair_labels.to(device)
+            cls1 = cls1.to(device)
+            cls2 = cls2.to(device)
+
+            optimizer.zero_grad()
+
+            feat1 = model(img1)
+            feat2 = model(img2)
+
+            # ArcFace 分类（对两个分支的身份都计算）
+            loss_cls = arcface_loss(torch.cat([feat1, feat2], dim=0), torch.cat([cls1, cls2], dim=0))
+
+            # 对比损失
+            loss_metric = contrastive_loss(feat1, feat2, pair_labels)
+
+            loss = loss_cls + contrastive_weight * loss_metric
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+
+        avg_loss = running_loss / len(train_loader)
+        scheduler.step()
+
+        # 验证：用同一批数据评估度量准确率
+        model.eval()
+        arcface_loss.eval()
+        val_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for batch in test_loader:
+                img1, img2, pair_labels, cls1, cls2 = batch
+                img1, img2 = img1.to(device), img2.to(device)
+                pair_labels = pair_labels.to(device)
+                cls1 = cls1.to(device)
+                cls2 = cls2.to(device)
+
+                feat1 = model(img1)
+                feat2 = model(img2)
+
+                loss_cls = arcface_loss(torch.cat([feat1, feat2], dim=0), torch.cat([cls1, cls2], dim=0))
+                loss_metric = contrastive_loss(feat1, feat2, pair_labels)
+                loss = loss_cls + contrastive_weight * loss_metric
+                val_loss += loss.item()
+
+                # 二分类精度（对比分支）
+                feat1_norm = F.normalize(feat1, p=2, dim=1)
+                feat2_norm = F.normalize(feat2, p=2, dim=1)
+                cosine_similarity = F.cosine_similarity(feat1_norm, feat2_norm)
+                cosine_distance = 1 - cosine_similarity
+                threshold = margin / 2
+                predictions = (cosine_distance < threshold).float()
+                correct += (predictions == pair_labels).sum().item()
+                total += pair_labels.size(0)
+
+        val_loss /= len(test_loader)
+        val_acc = 100 * correct / total if total > 0 else 0
+        log(f"Epoch {epoch+1}: Train Loss={avg_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.2f}%")
+
+        if val_loss < best_loss:
+            best_loss = val_loss
+            best_acc = val_acc
+            torch.save(
+                {
+                    "model": model.state_dict(),
+                    "arcface": arcface_loss.state_dict(),
+                    "feature_dim": feature_dim,
+                    "margin": margin,
+                    "arcface_margin": arcface_margin,
+                    "arcface_scale": arcface_scale,
+                    "loss_type": "arcface_contrastive",
+                    "backbone": backbone,
+                    "num_classes": num_classes,
+                    "contrastive_weight": contrastive_weight,
                 },
                 save_path,
             )

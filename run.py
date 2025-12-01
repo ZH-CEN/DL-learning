@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 from palm.config import load_config, get_transform, set_seed
 from palm.datasets import AuthDataset
 from palm.models import INet
-from palm.trainer import train_classifier, train_contrastive
+from palm.trainer import train_classifier, train_contrastive, train_arcface_contrastive
 from palm.evaluate import evaluate_authentication
 
 
@@ -35,7 +35,7 @@ def parse_args():
     
     # 运行模式
     parser.add_argument('--mode', type=str, default='all',
-                        choices=['train_classifier', 'train_contrastive', 'evaluate', 'all'],
+                        choices=['train_classifier', 'train_contrastive', 'train_arcface_contrastive', 'evaluate', 'all'],
                         help='运行模式')
     
     # 数据参数
@@ -59,6 +59,12 @@ def parse_args():
                         help='对比损失的margin')
     parser.add_argument('--batch_size', type=int, default=None,
                         help='对比学习训练批次大小（默认读取配置或32）')
+    parser.add_argument('--arcface_margin', type=float, default=0.5,
+                        help='ArcFace 角度 margin')
+    parser.add_argument('--arcface_scale', type=float, default=64.0,
+                        help='ArcFace logits 缩放因子')
+    parser.add_argument('--contrastive_weight', type=float, default=1.0,
+                        help='混合训练时对比损失的权重系数')
     
     # 评估参数
     parser.add_argument('--model', type=str, default='best_contrastive_model.pth',
@@ -128,6 +134,26 @@ def main():
         # 如果是all模式，更新模型路径
         if args.mode == 'all':
             args.model = result['best_path']
+
+    if args.mode == 'train_arcface_contrastive':
+        print("\n[2/3] ArcFace+对比混合训练...")
+        result = train_arcface_contrastive(
+            cfg=cfg,
+            data_root=args.data_root,
+            epochs=args.epochs,
+            lr=args.lr,
+            margin=args.margin,
+            feature_dim=args.feature_dim,
+            num_workers=args.num_workers,
+            save_path='best_arcface_contrastive.pth',
+            backbone=args.backbone,
+            batch_size=args.batch_size,
+            arcface_margin=args.arcface_margin,
+            arcface_scale=args.arcface_scale,
+            contrastive_weight=args.contrastive_weight,
+        )
+        print(f"✓ 混合模型训练完成 - 最佳损失: {result['best_metric']:.4f}\n")
+        args.model = result['best_path']
     
     if args.mode == 'evaluate' or args.mode == 'all':
         print("\n[3/3] 评估认证性能...")

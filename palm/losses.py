@@ -6,6 +6,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 
 class ContrastiveLoss(nn.Module):
@@ -102,3 +103,45 @@ class MSELoss(nn.Module):
 
     def forward(self, pred, target):
         return F.mse_loss(pred, target, reduction=self.reduction)
+
+
+class ArcFaceLoss(nn.Module):
+    """
+    ArcFace / cosine margin 损失。
+    参考论文：Additive Angular Margin Loss for Deep Face Recognition
+    """
+
+    def __init__(self, num_classes: int, feature_dim: int, margin: float = 0.5, scale: float = 64.0):
+        super().__init__()
+        self.num_classes = num_classes
+        self.feature_dim = feature_dim
+        self.margin = margin
+        self.scale = scale
+        self.weight = nn.Parameter(torch.randn(num_classes, feature_dim))
+
+        self.cos_m = math.cos(margin)
+        self.sin_m = math.sin(margin)
+        self.th = math.cos(math.pi - margin)
+        self.mm = math.sin(math.pi - margin) * margin
+
+    def forward(self, features: torch.Tensor, labels: torch.Tensor):
+        # 归一化特征和权重
+        features = F.normalize(features, p=2, dim=1)
+        weight = F.normalize(self.weight, p=2, dim=1)
+
+        # cos(theta)
+        cosine = F.linear(features, weight)  # (N, C)
+        sine = torch.sqrt(torch.clamp(1.0 - torch.pow(cosine, 2), min=1e-7))
+        phi = cosine * self.cos_m - sine * self.sin_m  # cos(theta + m)
+
+        # 仅对目标类添加 margin
+        one_hot = torch.zeros_like(cosine)
+        one_hot.scatter_(1, labels.view(-1, 1), 1.0)
+        logits = one_hot * phi + (1.0 - one_hot) * cosine
+
+        # 简单的 easy margin 处理
+        logits = torch.where(cosine > self.th, logits, cosine - self.mm)
+
+        logits *= self.scale
+        loss = F.cross_entropy(logits, labels)
+        return loss

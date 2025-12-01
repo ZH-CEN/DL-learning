@@ -195,7 +195,7 @@ class ContrastivePairDataset(Dataset):
     F/S 混合后按比例切分 train/test，默认 8:2。
     """
 
-    def __init__(self, root, mode='train', transform=None, cache: bool = True, split_ratio: float = 0.8):
+    def __init__(self, root, mode='train', transform=None, cache: bool = True, split_ratio: float = 0.8, return_ids: bool = False):
         """
         Args:
             root: 数据集根目录
@@ -203,6 +203,7 @@ class ContrastivePairDataset(Dataset):
             transform: 图像转换
             cache: 是否缓存图像
             split_ratio: 每个身份用于 train 的比例，剩余给 test
+            return_ids: 是否返回每张图像的身份索引（用于联合分类+度量）
         """
         self.root = Path(root)
         self.mode = mode
@@ -210,6 +211,7 @@ class ContrastivePairDataset(Dataset):
         self.cache = cache
         self._cache_data = {}
         self.split_ratio = split_ratio
+        self.return_ids = return_ids
 
         all_samples = sorted(self.root.glob("*.bmp"))
         id_groups = {}
@@ -237,7 +239,8 @@ class ContrastivePairDataset(Dataset):
             if selected:
                 self.id_groups[pid] = selected
 
-        self.ids = list(self.id_groups.keys())
+        self.ids = sorted(self.id_groups.keys())
+        self.id2idx = {pid: idx for idx, pid in enumerate(self.ids)}
 
         if self.cache:
             for pid, paths in self.id_groups.items():
@@ -297,6 +300,11 @@ class ContrastivePairDataset(Dataset):
         if self.transform:
             img1 = self.transform(img1)
             img2 = self.transform(img2)
+
+        if self.return_ids:
+            cls1 = self.id2idx[self._get_identity(path1.name)]
+            cls2 = self.id2idx[self._get_identity(path2.name)]
+            return img1, img2, torch.tensor(label, dtype=torch.float32), cls1, cls2
 
         return img1, img2, torch.tensor(label, dtype=torch.float32)
 
