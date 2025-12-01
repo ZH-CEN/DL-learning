@@ -17,7 +17,7 @@ class PalmDataset(Dataset):
     用于训练分类模型
     """
     
-    def __init__(self, root, transform=None, target_transform=None, cache=True, samples=None):
+    def __init__(self, root, transform=None, target_transform=None, cache=True, samples=None, id2idx=None):
         """
         Args:
             root: 数据集根目录
@@ -25,6 +25,7 @@ class PalmDataset(Dataset):
             target_transform: 标签转换
             cache: 是否缓存图像到内存
             samples: 可选，预先指定的样本 Path 列表；若为 None，则从 root/*.bmp 自动收集
+            id2idx: 可选，固定的身份->类别编号映射，保证跨 train/val 一致
         """
         self.root = Path(root)
         if samples is None:
@@ -37,8 +38,14 @@ class PalmDataset(Dataset):
         self._cache_data = {}
 
         # 区分左右手，格式 "F_100" 或 "S_100"
-        ids = sorted({self._get_identity(p.name) for p in self.samples})
-        self.id2idx = {pid: idx for idx, pid in enumerate(ids)}
+        if id2idx is None:
+            ids = sorted({self._get_identity(p.name) for p in self.samples})
+            self.id2idx = {pid: idx for idx, pid in enumerate(ids)}
+        else:
+            self.id2idx = dict(id2idx)
+            missing = {self._get_identity(p.name) for p in self.samples} - set(self.id2idx)
+            if missing:
+                raise ValueError(f"样本中存在未映射的身份: {missing}")
 
         # 如果启用缓存，预加载所有图像
         if self.cache:

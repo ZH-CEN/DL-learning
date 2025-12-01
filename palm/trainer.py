@@ -62,8 +62,12 @@ def train_classifier(
         val_paths = train_paths[cutoff:]
         train_paths = train_paths[:cutoff]
 
-    train_set = PalmDataset(data_root, transform=transform, cache=cache, samples=train_paths)
-    val_set = PalmDataset(data_root, transform=transform, cache=cache, samples=val_paths)
+    # 固定标签映射，避免 train/val 顺序漂移
+    all_ids = sorted(id_groups.keys())
+    id2idx = {pid: idx for idx, pid in enumerate(all_ids)}
+
+    train_set = PalmDataset(data_root, transform=transform, cache=cache, samples=train_paths, id2idx=id2idx)
+    val_set = PalmDataset(data_root, transform=transform, cache=cache, samples=val_paths, id2idx=id2idx)
 
     batch_size = cfg["train"]["batch_size"]
     train_loader = DataLoader(train_set, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
