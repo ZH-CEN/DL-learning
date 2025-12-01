@@ -2,3 +2,5 @@
 *.zip
 
 PalmBigDataBase
+*.pth
+*.pyc
