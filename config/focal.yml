@@ -1,0 +1,5 @@
+# focal loss 训练配置（分类）
+learning_rate: 0.001
+epochs: 50
+focal_alpha: 0.25
+focal_gamma: 2.0

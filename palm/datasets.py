@@ -220,5 +220,62 @@ class ContrastivePairDataset(Dataset):
         if self.transform:
             img1 = self.transform(img1)
             img2 = self.transform(img2)
-        
+
         return img1, img2, torch.tensor(label, dtype=torch.float32)
+
+
+class TripletDataset(Dataset):
+    """
+    三元组数据集
+    返回 (anchor, positive, negative)
+    """
+
+    def __init__(self, root, mode="train", transform=None):
+        assert mode in {"train", "test"}
+        self.root = Path(root)
+        self.mode = mode
+        self.transform = transform
+
+        all_samples = sorted(self.root.glob("*.bmp"))
+        id_groups = {}
+        for path in all_samples:
+            pid = self._get_identity(path.name)
+            id_groups.setdefault(pid, []).append(path)
+
+        self.id_groups = {}
+        for pid, paths in id_groups.items():
+            selected = paths[:5] if mode == "train" else paths[5:10]
+            if selected:
+                self.id_groups[pid] = selected
+        self.ids = list(self.id_groups.keys())
+
+    @staticmethod
+    def _get_identity(filename):
+        parts = filename.split("_")
+        hand = parts[1]
+        person_id = parts[2]
+        return f"{hand}_{person_id}"
+
+    def __len__(self):
+        return max(1, len(self.ids) * 10)
+
+    def __getitem__(self, index):
+        # 选择一个身份作为 anchor/positive
+        pid = self.ids[index % len(self.ids)]
+        paths = self.id_groups[pid]
+        anchor_path, pos_path = random.sample(paths, 2) if len(paths) >= 2 else (paths[0], paths[0])
+
+        # 选择不同身份作为 negative
+        neg_pid = self.ids[(index + 1) % len(self.ids)]
+        neg_path = random.choice(self.id_groups[neg_pid])
+
+        anchor = Image.open(anchor_path).convert("L")
+        positive = Image.open(pos_path).convert("L")
+        negative = Image.open(neg_path).convert("L")
+
+        if self.transform:
+            anchor = self.transform(anchor)
+            positive = self.transform(positive)
+            negative = self.transform(negative)
+
+        return anchor, positive, negative

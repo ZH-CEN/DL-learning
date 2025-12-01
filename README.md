@@ -12,8 +12,14 @@ DL-learning/
 │   ├── datasets.py               # 数据集定义
 │   ├── models.py                 # 模型定义
 │   ├── losses.py                 # 损失函数
-│   ├── train.py                  # 训练函数
+│   ├── trainer.py                # 训练函数
 │   └── evaluate.py               # 评估函数
+├── config/                       # 按损失函数划分的训练配置
+│   ├── contrastive.yml
+│   ├── triplet.yml
+│   ├── margin.yml
+│   ├── focal.yml
+│   └── mse.yml
 ├── PalmBigDataBase/              # 数据集目录
 ├── args.yml                       # 配置文件
 ├── run.py                         # 命令行主程序
@@ -49,7 +55,7 @@ python run.py --mode all --epochs 30
 
 #### 仅训练分类模型
 ```bash
-python run.py --mode train_classifier --epochs 30 --lr 0.001
+python run.py --mode train_classifier --epochs 30 --lr 0.001 --cls_loss ce  # 可选 ce/focal/mse
 ```
 
 #### 仅训练对比学习模型
@@ -67,41 +73,11 @@ python run.py --mode evaluate --model best_contrastive_model.pth --threshold 0.5
 python run.py --mode evaluate --threshold 0.3 0.4 0.5 0.6 0.7
 ```
 
-### 方法2：Python脚本
+> 度量学习训练时会自动读取 `config/<loss>.yml`（如 `config/contrastive.yml`、`config/triplet.yml`、`config/margin.yml`），其中可配置 `learning_rate`、`epochs`、`batch_size`、`feature_dim`、`margin`、`weight_decay`、`lr_step_size`、`lr_gamma` 等超参数。未提供对应文件时使用代码内默认值。
+>
+> 分类训练支持 `--cls_loss ce|focal|mse`，会自动读取 `config/focal.yml` 或 `config/mse.yml` 中的超参（如 `focal_alpha`、`focal_gamma`、`learning_rate`、`epochs`）。未提供配置文件则使用代码默认值。
 
-```python
-from palm import INet, AuthDataset, train_contrastive, evaluate_authentication
-from palm.config import load_config, get_transform
-from torch.utils.data import DataLoader
-
-# 加载配置
-cfg = load_config()
-transform = get_transform(cfg)
-
-# 训练模型
-result = train_contrastive(
-    cfg=cfg,
-    data_root='PalmBigDataBase',
-    epochs=30,
-    margin=0.5,
-    feature_dim=128
-)
-
-# 评估模型
-device = 'cuda'
-model = INet(feature_dim=128).to(device)
-model.load_state_dict(torch.load(result['best_path']))
-
-gallery = AuthDataset('PalmBigDataBase', mode='train', transform=transform)
-query = AuthDataset('PalmBigDataBase', mode='test', transform=transform)
-
-gallery_loader = DataLoader(gallery, batch_size=64)
-query_loader = DataLoader(query, batch_size=64)
-
-evaluate_authentication(model, gallery_loader, query_loader, threshold=0.5)
-```
-
-### 方法3：Jupyter Notebook
+### 方法2：Jupyter Notebook
 
 打开 `PalmRecognition.ipynb` 交互式运行。
 

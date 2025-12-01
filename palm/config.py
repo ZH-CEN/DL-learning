@@ -49,6 +49,24 @@ def load_config(config_path="args.yml"):
     return cfg
 
 
+def load_loss_config(loss_name: str, config_dir: str = "config"):
+    """
+    加载指定 loss 的配置文件（可选）。
+
+    Args:
+        loss_name: 损失函数名称（如 contrastive / triplet / margin）
+        config_dir: 配置文件目录，默认 config/
+
+    Returns:
+        dict: 配置字典，若文件不存在则返回空字典
+    """
+    cfg_path = Path(config_dir) / f"{loss_name}.yml"
+    if not cfg_path.exists():
+        return {}
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
 def get_transform(cfg):
     """
     获取数据预处理转换

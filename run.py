@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from palm.config import load_config, get_transform, set_seed
 from palm.datasets import AuthDataset
 from palm.models import INet
-from palm.train import train_classifier, train_contrastive
+from palm.trainer import train_classifier, train_contrastive
 from palm.evaluate import evaluate_authentication
 
 
@@ -47,6 +47,8 @@ def parse_args():
                         help='训练轮数')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='学习率')
+    parser.add_argument('--cls_loss', type=str, default='ce', choices=['ce', 'focal', 'mse'],
+                        help='分类损失类型')
     parser.add_argument('--feature_dim', type=int, default=128,
                         help='特征维度')
     parser.add_argument('--margin', type=float, default=0.5,
@@ -93,7 +95,8 @@ def main():
             lr=args.lr,
             cache=args.cache,
             num_workers=args.num_workers,
-            save_path='best_classifier.pth'
+            save_path='best_classifier.pth',
+            loss_type=args.cls_loss,
         )
         print(f"✓ 分类模型训练完成 - 最佳准确率: {result['best_metric']*100:.2f}%\n")
     

@@ -5,11 +5,11 @@ Palm Recognition Package
 
 __version__ = "1.0.0"
 
-from .models import INet, FeatureNet, VGG
-from .datasets import PalmDataset, AuthDataset, ContrastivePairDataset
-from .losses import ContrastiveLoss, TripletLoss
-from .config import load_config, get_transform, set_seed
-from .train import train_classifier, train_contrastive
+from .models import INet, FeatureNet, VGG, PalmClassifier, FeatureExtractor
+from .datasets import PalmDataset, AuthDataset, ContrastivePairDataset, TripletDataset
+from .losses import ContrastiveLoss, TripletLoss, MarginLoss, FocalLoss, MSELoss
+from .config import load_config, load_loss_config, get_transform, set_seed
+from .trainer import train_classifier, train_contrastive
 from .evaluate import evaluate_authentication, extract_features, build_gallery, authenticate_single
 
 __all__ = [
@@ -17,15 +17,22 @@ __all__ = [
     "INet",
     "FeatureNet",
     "VGG",
+    "PalmClassifier",
+    "FeatureExtractor",
     # Datasets
     "PalmDataset",
     "AuthDataset",
     "ContrastivePairDataset",
+    "TripletDataset",
     # Losses
     "ContrastiveLoss",
     "TripletLoss",
+    "MarginLoss",
+    "FocalLoss",
+    "MSELoss",
     # Config
     "load_config",
+    "load_loss_config",
     "get_transform",
     "set_seed",
     # Training
