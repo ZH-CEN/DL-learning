@@ -201,10 +201,16 @@ def main():
             model = INet(feature_dim=args.feature_dim).to(device)
             model.load_state_dict(checkpoint)
         
-        # 准备数据
+        # 准备数据，共享 id2idx，避免 train/test 标签映射不一致
+        from palm.datasets import AuthDataset
+        from pathlib import Path as _Path
+
         transform = get_transform(cfg)
-        gallery_set = AuthDataset(args.data_root, mode='train', transform=transform, cache=args.cache)
-        query_set = AuthDataset(args.data_root, mode='test', transform=transform, cache=args.cache)
+        all_ids = sorted({AuthDataset._get_identity(p.name) for p in _Path(args.data_root).glob("*.bmp")})
+        shared_id2idx = {pid: idx for idx, pid in enumerate(all_ids)}
+
+        gallery_set = AuthDataset(args.data_root, mode='train', transform=transform, cache=args.cache, id2idx=shared_id2idx)
+        query_set = AuthDataset(args.data_root, mode='test', transform=transform, cache=args.cache, id2idx=shared_id2idx)
         
         gallery_loader = DataLoader(gallery_set, batch_size=cfg['train']['batch_size'], 
                                     shuffle=False, num_workers=args.num_workers)
