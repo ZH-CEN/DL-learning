@@ -72,9 +72,9 @@ class PalmDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, index):
-        # 从缓存或磁盘读取图像
+        # 从缓存或磁盘读取图像（从缓存取出时复制，避免 transform 污染缓存对象）
         if self.cache and index in self._cache_data:
-            img = self._cache_data[index]
+            img = self._cache_data[index].copy()
         else:
             path = self.samples[index]
             with Image.open(path) as img:
@@ -136,8 +136,6 @@ class AuthDataset(Dataset):
                 return [], []
             if len(paths) >= 10:
                 return paths[:5], paths[5:10]
-            if len(paths) >= 10:
-                return paths[:5], paths[5:10]
             cutoff = max(1, int(len(paths) * split_ratio))
             if cutoff >= len(paths) and len(paths) > 1:
                 cutoff = len(paths) - 1
@@ -176,7 +174,7 @@ class AuthDataset(Dataset):
 
     def __getitem__(self, index):
         if self.cache and index in self._cache_data:
-            img = self._cache_data[index]
+            img = self._cache_data[index].copy()
         else:
             path = self.samples[index]
             img = Image.open(path).convert("L")

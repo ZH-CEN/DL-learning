@@ -179,7 +179,8 @@ def main():
         checkpoint = None
         model_path = args.model or f"best_contrastive_{args.backbone}.pth"
         try:
-            checkpoint = torch.load(model_path, map_location=device)
+            # weights_only=True：本项目的 .pth 仅含 state_dict 与基础标量，安全限制 pickle 反序列化防止 RCE
+            checkpoint = torch.load(model_path, map_location=device, weights_only=True)
             log(f"✓ 成功加载模型: {model_path}")
         except FileNotFoundError:
             log(f"✗ 找不到模型文件: {model_path}")

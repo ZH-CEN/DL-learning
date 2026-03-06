@@ -60,7 +60,8 @@ def run_all() -> None:
     query_loader = DataLoader(query, batch_size=cfg["test"]["batch_size"], shuffle=False)
 
     model = FeatureNet(feature_dim=FEATURE_DIM).to(device)
-    state = torch.load(contrastive_result["best_path"], map_location=device)
+    # weights_only=True：本项目的 .pth 仅含 state_dict 与基础标量，安全限制 pickle 反序列化防止 RCE
+    state = torch.load(contrastive_result["best_path"], map_location=device, weights_only=True)
     model.load_state_dict(state)
 
     for thr in THRESHOLDS:
